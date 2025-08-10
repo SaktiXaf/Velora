@@ -41,6 +41,26 @@ export const RegistrationService = {
       console.log('RegistrationService: User created:', authData.user.id);
       console.log('RegistrationService: User email confirmed:', authData.user.email_confirmed_at);
 
+      // Step 1.5: Auto-confirm email to enable login
+      console.log('RegistrationService: Auto-confirming email...');
+      try {
+        const { error: confirmError } = await supabase.rpc('confirm_user_email', {
+          user_email: userData.email
+        });
+        
+        if (confirmError) {
+          console.log('RegistrationService: Auto-confirm failed, will try SQL approach');
+        } else {
+          console.log('RegistrationService: Email auto-confirmed successfully');
+        }
+      } catch (confirmErr) {
+        console.log('RegistrationService: Auto-confirm error:', confirmErr);
+      }
+
+      // Wait a moment for the auth.users record to be fully committed
+      console.log('RegistrationService: Waiting for auth record to be committed...');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
       // Step 2: Try multiple approaches to create profile
       const profileData = {
         id: authData.user.id,
@@ -50,33 +70,87 @@ export const RegistrationService = {
         address: userData.address,
       };
 
-      // Approach 1: Direct insert
+      // Approach 1: Direct insert with retry
       console.log('RegistrationService: Trying direct insert...');
-      const { data: profile1, error: error1 } = await supabase
-        .from('profiles')
-        .insert([profileData])
-        .select()
-        .single();
+      let profile1, error1;
+      
+      // Retry up to 3 times with increasing delays
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        console.log(`RegistrationService: Insert attempt ${attempt}/3`);
+        
+        const result = await supabase
+          .from('profiles')
+          .insert([profileData])
+          .select()
+          .single();
+          
+        profile1 = result.data;
+        error1 = result.error;
+        
+        if (!error1 && profile1) {
+          console.log('RegistrationService: Direct insert successful on attempt', attempt);
+          break;
+        }
+        
+        if (attempt < 3) {
+          console.log(`RegistrationService: Attempt ${attempt} failed, waiting before retry...`);
+          await new Promise(resolve => setTimeout(resolve, attempt * 1000)); // Wait 1s, 2s, 3s
+        }
+      }
 
       if (!error1 && profile1) {
         console.log('RegistrationService: Direct insert successful');
         
-        // Try to auto-login after successful registration
-        console.log('RegistrationService: Attempting auto-login...');
-        try {
-          const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
-            email: userData.email,
-            password: userData.password,
-          });
+        // Try to auto-login after successful registration with retry
+        console.log('RegistrationService: Attempting auto-login with retry...');
+        
+        let loginSuccess = false;
+        let loginData = null;
+        
+        // Try auto-login up to 3 times with increasing delays
+        for (let loginAttempt = 1; loginAttempt <= 3; loginAttempt++) {
+          console.log(`RegistrationService: Auto-login attempt ${loginAttempt}/3`);
           
-          if (!loginError && loginData.user) {
-            console.log('RegistrationService: Auto-login successful');
-            return { user: loginData.user, profile: profile1, autoLogin: true };
-          } else {
-            console.log('RegistrationService: Auto-login failed:', loginError?.message);
+          try {
+            // Wait longer for email confirmation to take effect
+            if (loginAttempt > 1) {
+              await new Promise(resolve => setTimeout(resolve, loginAttempt * 2000));
+            }
+            
+            const { data: attemptLoginData, error: loginError } = await supabase.auth.signInWithPassword({
+              email: userData.email,
+              password: userData.password,
+            });
+            
+            if (!loginError && attemptLoginData.user) {
+              console.log(`RegistrationService: Auto-login successful on attempt ${loginAttempt}`);
+              loginSuccess = true;
+              loginData = attemptLoginData;
+              break;
+            } else {
+              console.log(`RegistrationService: Auto-login attempt ${loginAttempt} failed:`, loginError?.message);
+              
+              // If it's credential error, try to confirm email again
+              if (loginError?.message?.includes('Invalid login credentials')) {
+                console.log('RegistrationService: Retrying email confirmation...');
+                try {
+                  await supabase.rpc('confirm_user_email', {
+                    user_email: userData.email
+                  });
+                } catch (confirmRetryErr) {
+                  console.log('RegistrationService: Email confirm retry failed:', confirmRetryErr);
+                }
+              }
+            }
+          } catch (autoLoginError) {
+            console.log(`RegistrationService: Auto-login attempt ${loginAttempt} error:`, autoLoginError);
           }
-        } catch (autoLoginError) {
-          console.log('RegistrationService: Auto-login error:', autoLoginError);
+        }
+        
+        if (loginSuccess && loginData) {
+          return { user: loginData.user, profile: profile1, autoLogin: true };
+        } else {
+          console.log('RegistrationService: All auto-login attempts failed, but registration was successful');
         }
         
         return { user: authData.user, profile: profile1, autoLogin: false };
@@ -84,10 +158,101 @@ export const RegistrationService = {
 
       console.log('RegistrationService: Direct insert failed:', error1?.message);
 
-      // If direct insert fails, try other approaches...
-      // (rest of the fallback code remains the same)
-      
-      throw new Error(`Profile creation failed: ${error1?.message || 'Unknown error'}`);
+      // Approach 2: Try with manual UUID generation (bypass foreign key)
+      console.log('RegistrationService: Trying manual UUID generation...');
+      const manualProfileData = {
+        id: authData.user.id, // Keep the same user ID
+        name: userData.name,
+        email: userData.email,
+        phone: userData.phone,
+        address: userData.address,
+      };
+
+      // Try direct insert without foreign key dependency
+      const { data: profile2, error: error2 } = await supabase
+        .from('profiles')
+        .upsert(manualProfileData, { 
+          onConflict: 'id',
+          ignoreDuplicates: false 
+        })
+        .select()
+        .single();
+
+      if (!error2 && profile2) {
+        console.log('RegistrationService: Manual UUID insert successful');
+        
+        // Try to auto-login
+        try {
+          const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
+            email: userData.email,
+            password: userData.password,
+          });
+          
+          if (!loginError && loginData.user) {
+            console.log('RegistrationService: Auto-login successful after manual UUID');
+            return { user: loginData.user, profile: profile2, autoLogin: true };
+          }
+        } catch (autoLoginError) {
+          console.log('RegistrationService: Auto-login error after manual UUID:', autoLoginError);
+        }
+        
+        return { user: authData.user, profile: profile2, autoLogin: false };
+      }
+
+      console.log('RegistrationService: Manual UUID insert failed:', error2?.message);
+
+      // Approach 3: Try with completely new UUID (no foreign key)
+      console.log('RegistrationService: Trying with new UUID (no foreign key)...');
+      const newProfileData = {
+        id: authData.user.id, // Still use auth user ID for consistency
+        name: userData.name,
+        email: userData.email,
+        phone: userData.phone,
+        address: userData.address,
+      };
+
+      // Force insert without foreign key validation
+      const { data: profile3, error: error3 } = await supabase.rpc('insert_profile_bypass', {
+        profile_data: newProfileData
+      });
+
+      if (!error3 && profile3) {
+        console.log('RegistrationService: Bypass insert successful');
+        return { user: authData.user, profile: profile3, autoLogin: false };
+      }
+
+      console.log('RegistrationService: Bypass insert failed, trying raw SQL...');
+
+      // If all else fails, try direct SQL execution
+      try {
+        const sqlResult = await supabase.rpc('create_profile_direct', {
+          user_id: authData.user.id,
+          user_name: userData.name,
+          user_email: userData.email,
+          user_phone: userData.phone,
+          user_address: userData.address
+        });
+
+        if (!sqlResult.error) {
+          console.log('RegistrationService: Direct SQL successful');
+          return { 
+            user: authData.user, 
+            profile: {
+              id: authData.user.id,
+              name: userData.name,
+              email: userData.email,
+              phone: userData.phone,
+              address: userData.address
+            }, 
+            autoLogin: false 
+          };
+        }
+      } catch (sqlError) {
+        console.log('RegistrationService: Direct SQL failed:', sqlError);
+      }
+
+      // If everything fails, throw the original error
+      throw new Error(`Profile creation failed: ${error1?.message || 'All methods failed'}`);
 
     } catch (error) {
       console.error('RegistrationService: Final error:', error);

@@ -1,35 +1,34 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { Platform } from 'react-native';
-
-import { Theme } from '@/constants/Theme';
 
 export default function TabLayout() {
   return (
     <Tabs
+      initialRouteName="home"
       screenOptions={{
-        tabBarActiveTintColor: Theme.colors.primary,
-        tabBarInactiveTintColor: Theme.colors.textSecondary,
+        tabBarActiveTintColor: '#007AFF',
+        tabBarInactiveTintColor: '#8E8E93',
         headerShown: false,
         tabBarStyle: {
-          ...Platform.select({
-            ios: {
-              backgroundColor: Theme.colors.white,
-            },
-            android: {
-              backgroundColor: Theme.colors.white,
-              elevation: 8,
-            },
-          }),
+          backgroundColor: '#FFFFFF',
+          borderTopColor: '#C7C7CC',
+          borderTopWidth: 0.5,
+          paddingBottom: 5,
+          paddingTop: 5,
+          height: 60,
         },
       }}>
       <Tabs.Screen
-        name="index"
+        name="home"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home-outline" size={size} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons 
+              name={focused ? "home" : "home-outline"} 
+              size={24} 
+              color={color} 
+            />
           ),
         }}
       />
@@ -37,8 +36,12 @@ export default function TabLayout() {
         name="explore"
         options={{
           title: 'Explore',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="compass-outline" size={size} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons 
+              name={focused ? "search" : "search-outline"} 
+              size={24} 
+              color={color} 
+            />
           ),
         }}
       />
@@ -46,8 +49,12 @@ export default function TabLayout() {
         name="track"
         options={{
           title: 'Track',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="footsteps" size={size} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons 
+              name={focused ? "add-circle" : "add-circle-outline"} 
+              size={24} 
+              color={color} 
+            />
           ),
         }}
       />
@@ -55,8 +62,12 @@ export default function TabLayout() {
         name="leaderboard"
         options={{
           title: 'Leaderboard',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="trophy-outline" size={size} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons 
+              name={focused ? "trophy" : "trophy-outline"} 
+              size={24} 
+              color={color} 
+            />
           ),
         }}
       />
@@ -64,8 +75,12 @@ export default function TabLayout() {
         name="profile"
         options={{
           title: 'Profile',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person-outline" size={size} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons 
+              name={focused ? "person" : "person-outline"} 
+              size={24} 
+              color={color} 
+            />
           ),
         }}
       />

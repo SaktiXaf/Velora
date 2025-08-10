@@ -9,13 +9,10 @@ export function useAuth() {
   const [loading, setLoading] = useState(true);
   const [initialized, setInitialized] = useState(false);
 
-  // Force refresh authentication state
+  // Simple refresh function - no logs to prevent re-renders
   const refreshAuth = useCallback(async () => {
     try {
-      setLoading(true);
       const localSession = await sessionStorage.getStoredSession();
-      console.log('🔄 RefreshAuth: Local session:', localSession?.email || 'none');
-      
       if (localSession) {
         const mockUser = {
           id: localSession.userId,
@@ -27,14 +24,11 @@ export function useAuth() {
           created_at: localSession.lastLogin,
           updated_at: localSession.lastLogin
         } as User;
-        console.log('✅ RefreshAuth: Setting user:', mockUser.email, 'ID:', mockUser.id);
         setUser(mockUser);
       } else {
-        console.log('❌ RefreshAuth: No session, clearing user');
         setUser(null);
       }
     } catch (error) {
-      console.error('❌ RefreshAuth error:', error);
       setUser(null);
     } finally {
       setInitialized(true);
@@ -79,33 +73,23 @@ export function useAuth() {
     // Auth change listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('🔔 Supabase auth event:', event, session?.user?.email || 'no user');
         if (mounted) {
           if (session?.user) {
-            console.log('✅ Auth: Setting Supabase user:', session.user.email);
             setUser(session.user);
             await sessionStorage.saveSession(session.user);
           } else {
-            console.log('❌ Auth: Clearing user');
             setUser(null);
             await sessionStorage.clearSession();
           }
-          setLoading(false);
-          setInitialized(true);
         }
       }
     );
 
-    // Mock auth callback - force state update
+    // Mock auth callback
     const handleMockAuthChange = async (mockUser: any) => {
-      console.log('🔔 Mock auth callback:', mockUser?.email || 'no user');
       if (mounted && mockUser) {
-        console.log('✅ Mock: Setting user:', mockUser.email);
         setUser(mockUser);
         setLoading(false);
-        setInitialized(true);
-        // Force a small delay to ensure state propagation
-        await new Promise(resolve => setTimeout(resolve, 100));
       }
     };
 
@@ -122,16 +106,9 @@ export function useAuth() {
   const signOut = useCallback(async () => {
     try {
       setLoading(true);
-      console.log('🚪 Signing out user:', user?.email);
-      
-      // Clear all local session data
       await sessionStorage.clearSession();
-      
-      // Clear Supabase session
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
-      
-      console.log('✅ Sign out successful');
     } catch (error) {
       console.error('Sign out failed:', error);
       throw error;
@@ -139,7 +116,7 @@ export function useAuth() {
       setUser(null);
       setLoading(false);
     }
-  }, [user?.email]);
+  }, []);
 
   return {
     user,

@@ -1,11 +1,14 @@
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
+import FollowListModal from '@/components/FollowListModal';
 import LoginScreen from '@/components/LoginScreen';
 import { ProfileImagePicker } from '@/components/ProfileImagePicker';
 import RegisterScreen from '@/components/RegisterScreen';
 import { Theme } from '@/constants/Theme';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/hooks/useAuth';
+import { useFollowStats } from '@/hooks/useFollowStats';
+import { activityService } from '@/lib/activityService';
 import { ProfileService } from '@/lib/profileService';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
@@ -28,16 +31,16 @@ interface UserData {
 }
 
 const initialUser: UserData = {
-  name: 'Sakti Selginov',
-  bio: 'Lari doang, Muncak kadang"',
+  name: 'User',
+  bio: '',
   avatar: null,
   age: null,
   stats: {
-  totalDistance: 1250.5,
-  totalTime: 98400, 
-  totalActivities: 85,
-  followers: 245,
-  following: 173,
+    totalDistance: 0,
+    totalTime: 0,
+    totalActivities: 0,
+    followers: 0,
+    following: 0,
   },
 };
 
@@ -49,7 +52,8 @@ function formatTime(seconds: number): string {
 
 export default function ProfileScreen() {
   const { mode, toggleTheme, colors } = useTheme();
-  const { isAuthenticated, user, signOut } = useAuth();
+  const { isAuthenticated, user, signOut, refreshAuth } = useAuth();
+  const { stats: followStats, isLoading: followStatsLoading } = useFollowStats(user?.id || null);
   const [showLoginScreen, setShowLoginScreen] = useState(false);
   const [showRegisterScreen, setShowRegisterScreen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -59,14 +63,46 @@ export default function ProfileScreen() {
   const [editedAvatar, setEditedAvatar] = useState<string | null>(null);
   const [editedAge, setEditedAge] = useState('');
   const [loading, setLoading] = useState(false);
+  
+  // Follow list modal states
+  const [showFollowModal, setShowFollowModal] = useState(false);
+  const [followModalType, setFollowModalType] = useState<'followers' | 'following'>('followers');
+  const [followModalTitle, setFollowModalTitle] = useState('');
 
-  // Check authentication status when this tab is focused (but don't auto-show login)
+  // Check authentication status when this tab is focused and reload data
   useFocusEffect(
     useCallback(() => {
-      // Just check status, don't auto-show login screen
       console.log('Profile tab focused, authenticated:', isAuthenticated);
-    }, [isAuthenticated])
+      if (isAuthenticated && user) {
+        loadUserProfile(user.id);
+      }
+    }, [isAuthenticated, user])
   );
+
+  // Reload profile data when the component gains focus (to update followers/following)
+  useFocusEffect(
+    useCallback(() => {
+      if (isAuthenticated && user) {
+        console.log('📊 Profile focused, reloading user data for:', user.id);
+        loadUserProfile(user.id);
+      }
+    }, [isAuthenticated, user])
+  );
+
+  // Update userData when followStats change (real-time updates)
+  useEffect(() => {
+    if (followStats && (followStats.followers !== userData.stats.followers || followStats.following !== userData.stats.following)) {
+      console.log('🔔 Follow stats updated, updating userData:', followStats);
+      setUserData(prev => ({
+        ...prev,
+        stats: {
+          ...prev.stats,
+          followers: followStats.followers,
+          following: followStats.following,
+        }
+      }));
+    }
+  }, [followStats]);
 
   useEffect(() => {
     if (isAuthenticated && user) {
@@ -77,24 +113,60 @@ export default function ProfileScreen() {
   const loadUserProfile = async (userId: string) => {
     setLoading(true);
     try {
-      const profile = await ProfileService.getProfile(userId);
+      const [profile, activityStats] = await Promise.all([
+        ProfileService.getProfile(userId),
+        activityService.getTotalStats(userId)
+      ]);
+      
       if (profile) {
-        setUserData({
+        setUserData(prev => ({
           name: profile.name,
           bio: profile.bio || '',
           avatar: profile.avatar || null,
           age: profile.age || null,
           stats: {
-            totalDistance: 1250.5, 
-            totalTime: 98400,
-            totalActivities: 85,
-            followers: 245,
-            following: 173,
+            totalDistance: activityStats.totalDistance,
+            totalTime: activityStats.totalDuration,
+            totalActivities: activityStats.totalActivities,
+            // Keep current follow stats from useFollowStats hook
+            followers: prev.stats.followers,
+            following: prev.stats.following,
           },
-        });
+        }));
+      } else {
+        // Set default values if no profile found
+        setUserData(prev => ({
+          name: 'User',
+          bio: '',
+          avatar: null,
+          age: null,
+          stats: {
+            totalDistance: 0,
+            totalTime: 0,
+            totalActivities: 0,
+            // Keep current follow stats from useFollowStats hook
+            followers: prev.stats.followers,
+            following: prev.stats.following,
+          },
+        }));
       }
     } catch (error) {
       console.error('Error loading profile:', error);
+      // Set default values but keep follow stats
+      setUserData(prev => ({
+        name: 'User',
+        bio: '',
+        avatar: null,
+        age: null,
+        stats: {
+          totalDistance: 0,
+          totalTime: 0,
+          totalActivities: 0,
+          // Keep current follow stats from useFollowStats hook
+          followers: prev.stats.followers,
+          following: prev.stats.following,
+        },
+      }));
     } finally {
       setLoading(false);
     }
@@ -112,15 +184,34 @@ export default function ProfileScreen() {
   const handleLoginSuccess = async (userData: any) => {
     console.log('✅ Login successful in profile screen:', userData);
     setShowLoginScreen(false);
+    
+    // Force refresh auth state to recognize mock session
+    console.log('🔄 Calling refreshAuth to update authentication state...');
+    await refreshAuth?.();
+    
     // Force a small delay to ensure auth state updates
-    setTimeout(() => {
-      console.log('🔄 Login screen closed, auth should be updated');
-    }, 100);
+    setTimeout(async () => {
+      console.log('🔄 Login screen closed, forcing another auth refresh...');
+      await refreshAuth?.();
+    }, 500);
   };
 
   const handleRegisterSuccess = () => {
     console.log('Registration successful');
     setShowRegisterScreen(false);
+  };
+
+  // Handle follow list modal
+  const handleShowFollowers = () => {
+    setFollowModalType('followers');
+    setFollowModalTitle(`${userData.stats.followers} Followers`);
+    setShowFollowModal(true);
+  };
+
+  const handleShowFollowing = () => {
+    setFollowModalType('following');
+    setFollowModalTitle(`${userData.stats.following} Following`);
+    setShowFollowModal(true);
   };
 
   const handleSave = async () => {
@@ -446,15 +537,15 @@ export default function ProfileScreen() {
         )}
         
         <View style={styles.followContainer}>
-          <View style={styles.followItem}>
+          <TouchableOpacity style={styles.followItem} onPress={handleShowFollowers}>
             <Text style={[styles.followCount, { color: colors.text }]}>{userData.stats.followers}</Text>
             <Text style={[styles.followLabel, { color: colors.textSecondary }]}>Followers</Text>
-          </View>
+          </TouchableOpacity>
           <View style={[styles.followDivider, { backgroundColor: colors.border }]} />
-          <View style={styles.followItem}>
+          <TouchableOpacity style={styles.followItem} onPress={handleShowFollowing}>
             <Text style={[styles.followCount, { color: colors.text }]}>{userData.stats.following}</Text>
             <Text style={[styles.followLabel, { color: colors.textSecondary }]}>Following</Text>
-          </View>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -494,6 +585,15 @@ export default function ProfileScreen() {
         <Text style={styles.comingSoon}>Coming soon...</Text>
       </Card>
       </ScrollView>
+
+      {/* Follow List Modal */}
+      <FollowListModal
+        visible={showFollowModal}
+        onClose={() => setShowFollowModal(false)}
+        userId={user?.id || ''}
+        type={followModalType}
+        title={followModalTitle}
+      />
     </SafeAreaView>
   );
 }
