@@ -53,7 +53,7 @@ function formatTime(seconds: number): string {
 export default function ProfileScreen() {
   const { mode, toggleTheme, colors } = useTheme();
   const { isAuthenticated, user, signOut, refreshAuth } = useAuth();
-  const { stats: followStats, isLoading: followStatsLoading } = useFollowStats(user?.id || null);
+  const { stats: followStats, isLoading: followStatsLoading, refreshStats } = useFollowStats(user?.id || null);
   const [showLoginScreen, setShowLoginScreen] = useState(false);
   const [showRegisterScreen, setShowRegisterScreen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -85,14 +85,26 @@ export default function ProfileScreen() {
       if (isAuthenticated && user) {
         console.log('📊 Profile focused, reloading user data for:', user.id);
         loadUserProfile(user.id);
+        // Also refresh follow stats
+        if (refreshStats) {
+          console.log('🔄 Refreshing follow stats...');
+          refreshStats();
+        }
       }
-    }, [isAuthenticated, user])
+    }, [isAuthenticated, user, refreshStats])
   );
 
   // Update userData when followStats change (real-time updates)
   useEffect(() => {
-    if (followStats && (followStats.followers !== userData.stats.followers || followStats.following !== userData.stats.following)) {
-      console.log('🔔 Follow stats updated, updating userData:', followStats);
+    console.log('🔍 useEffect followStats check:', { 
+      followStats, 
+      currentFollowers: userData.stats.followers,
+      currentFollowing: userData.stats.following,
+      followStatsLoading
+    });
+    
+    if (followStats) {
+      console.log('🔔 Setting follow stats from hook:', followStats);
       setUserData(prev => ({
         ...prev,
         stats: {
@@ -102,7 +114,7 @@ export default function ProfileScreen() {
         }
       }));
     }
-  }, [followStats]);
+  }, [followStats, followStatsLoading]);
 
   useEffect(() => {
     if (isAuthenticated && user) {
@@ -113,12 +125,18 @@ export default function ProfileScreen() {
   const loadUserProfile = async (userId: string) => {
     setLoading(true);
     try {
+      console.log('🔄 Loading user profile for:', userId);
       const [profile, activityStats] = await Promise.all([
         ProfileService.getProfile(userId),
         activityService.getTotalStats(userId)
       ]);
       
       if (profile) {
+        console.log('👤 Profile loaded, preserving follow stats:', {
+          currentFollowers: userData.stats.followers,
+          currentFollowing: userData.stats.following
+        });
+        
         setUserData(prev => ({
           name: profile.name,
           bio: profile.bio || '',
@@ -485,6 +503,25 @@ export default function ProfileScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity 
+          style={[styles.refreshButton, { backgroundColor: colors.surface }]}
+          onPress={async () => {
+            console.log('🔄 Manual refresh button pressed');
+            if (refreshStats) {
+              await refreshStats();
+            }
+            if (user) {
+              await loadUserProfile(user.id);
+            }
+          }}
+        >
+          <Ionicons 
+            name="refresh" 
+            size={24} 
+            color={colors.primary} 
+          />
+        </TouchableOpacity>
+
+        <TouchableOpacity 
           style={[styles.editButton, { backgroundColor: colors.surface }]}
           onPress={() => setIsEditing(!isEditing)}
         >
@@ -630,6 +667,19 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: Theme.spacing.md,
     right: Theme.spacing.md + 60, // Position to the left of edit button
+    padding: Theme.spacing.sm,
+    backgroundColor: Theme.colors.white,
+    borderRadius: Theme.borderRadius.full,
+    shadowColor: Theme.colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  refreshButton: {
+    position: 'absolute',
+    top: Theme.spacing.md,
+    right: Theme.spacing.md + 120, // Position to the left of theme button
     padding: Theme.spacing.sm,
     backgroundColor: Theme.colors.white,
     borderRadius: Theme.borderRadius.full,

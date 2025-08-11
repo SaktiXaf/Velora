@@ -1,17 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  Modal,
-  TouchableOpacity,
-  Image,
-  ScrollView,
-  Alert,
-  Dimensions,
+    Alert,
+    Dimensions,
+    Image,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
-import { followService } from '../lib/followService';
 import { useTheme } from '../contexts/ThemeContext';
+import { triggerFollowStatsUpdate } from '../hooks/useFollowStats';
+import { followService } from '../lib/followService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -89,6 +90,12 @@ const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const handleFollowToggle = async () => {
     if (!user || loading) return;
     
+    // Prevent users from following themselves
+    if (user.id === currentUserId) {
+      Alert.alert('Cannot Follow', 'You cannot follow your own account');
+      return;
+    }
+    
     setLoading(true);
     try {
       if (isFollowing) {
@@ -102,6 +109,10 @@ const UserProfileModal: React.FC<UserProfileModalProps> = ({
         setStats(prev => ({ ...prev, followers: prev.followers + 1 }));
         Alert.alert('Success', `You are now following ${user.username}`);
       }
+
+      // Trigger follow stats update for the current user
+      await triggerFollowStatsUpdate(currentUserId);
+      console.log('🔔 Follow stats updated for current user:', currentUserId);
     } catch (error) {
       console.error('Error toggling follow:', error);
       Alert.alert('Error', 'Failed to update follow status');
@@ -172,27 +183,29 @@ const UserProfileModal: React.FC<UserProfileModalProps> = ({
             </View>
           </View>
 
-          {/* Follow Button */}
-          <TouchableOpacity
-            style={[
-              styles.followButton,
-              {
-                backgroundColor: isFollowing ? 'transparent' : theme.accent,
-                borderColor: theme.accent,
-              }
-            ]}
-            onPress={handleFollowToggle}
-            disabled={loading}
-          >
-            <Text style={[
-              styles.followButtonText,
-              {
-                color: isFollowing ? theme.accent : theme.background,
-              }
-            ]}>
-              {loading ? 'Loading...' : isFollowing ? '✓ Following' : '+ Follow'}
-            </Text>
-          </TouchableOpacity>
+          {/* Follow Button - Only show if not viewing own profile */}
+          {user.id !== currentUserId && (
+            <TouchableOpacity
+              style={[
+                styles.followButton,
+                {
+                  backgroundColor: isFollowing ? 'transparent' : theme.accent,
+                  borderColor: theme.accent,
+                }
+              ]}
+              onPress={handleFollowToggle}
+              disabled={loading}
+            >
+              <Text style={[
+                styles.followButtonText,
+                {
+                  color: isFollowing ? theme.accent : theme.background,
+                }
+              ]}>
+                {loading ? 'Loading...' : isFollowing ? '✓ Following' : '+ Follow'}
+              </Text>
+            </TouchableOpacity>
+          )}
 
           {/* Recent Activities */}
           <View style={styles.activitiesSection}>

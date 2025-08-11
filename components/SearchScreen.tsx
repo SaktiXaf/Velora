@@ -1,20 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  Modal,
-  TouchableOpacity,
-  TextInput,
-  FlatList,
-  Image,
-  Alert,
-  SafeAreaView,
+    Alert,
+    FlatList,
+    Image,
+    SafeAreaView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
-import { followService } from '../lib/followService';
-import { useThemeColor } from '../hooks/useThemeColor';
-import { useColorScheme } from '../hooks/useColorScheme';
 import { useTheme } from '../contexts/ThemeContext';
+import { triggerFollowStatsUpdate } from '../hooks/useFollowStats';
+import { followService } from '../lib/followService';
 import UserProfileModal from './UserProfileModal';
 
 interface User {
@@ -143,6 +141,12 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
   };
 
   const handleFollowToggle = async (user: User) => {
+    // Prevent users from following themselves
+    if (user.id === currentUserId) {
+      Alert.alert('Cannot Follow', 'You cannot follow your own account');
+      return;
+    }
+
     try {
       if (user.isFollowing) {
         await followService.unfollowUser(currentUserId, user.id);
@@ -158,6 +162,10 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
           u.id === user.id ? { ...u, isFollowing: !u.isFollowing } : u
         )
       );
+
+      // Trigger follow stats update for the current user
+      await triggerFollowStatsUpdate(currentUserId);
+      console.log('🔔 Follow stats updated for current user:', currentUserId);
     } catch (error) {
       console.error('Error toggling follow:', error);
       Alert.alert('Error', 'Failed to update follow status');
@@ -202,26 +210,28 @@ const SearchScreen: React.FC<SearchScreenProps> = ({
         </View>
       </View>
       
-      <TouchableOpacity
-        style={[
-          styles.followButton,
-          {
-            backgroundColor: item.isFollowing ? 'transparent' : theme.accent,
-            borderColor: theme.accent,
-          }
-        ]}
-        onPress={() => handleFollowToggle(item)}
-        activeOpacity={0.8}
-      >
-        <Text style={[
-          styles.followButtonText,
-          {
-            color: item.isFollowing ? theme.accent : theme.background,
-          }
-        ]}>
-          {item.isFollowing ? '✓ Following' : '+ Follow'}
-        </Text>
-      </TouchableOpacity>
+      {item.id !== currentUserId && (
+        <TouchableOpacity
+          style={[
+            styles.followButton,
+            {
+              backgroundColor: item.isFollowing ? 'transparent' : theme.accent,
+              borderColor: theme.accent,
+            }
+          ]}
+          onPress={() => handleFollowToggle(item)}
+          activeOpacity={0.8}
+        >
+          <Text style={[
+            styles.followButtonText,
+            {
+              color: item.isFollowing ? theme.accent : theme.background,
+            }
+          ]}>
+            {item.isFollowing ? '✓ Following' : '+ Follow'}
+          </Text>
+        </TouchableOpacity>
+      )}
     </TouchableOpacity>
   );
 

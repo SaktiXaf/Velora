@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { supabase, DatabaseUser, testSupabaseConnection } from './supabase';
+import { supabase, testSupabaseConnection } from './supabase';
 
 export interface FollowStats {
   followers: number;
@@ -85,6 +85,11 @@ export class FollowService {
     try {
       console.log(`${currentUserId} following user: ${targetUserId}`);
       
+      // Prevent self-follow
+      if (currentUserId === targetUserId) {
+        return { success: false, message: 'Cannot follow yourself' };
+      }
+      
       // Check if already following
       const isAlreadyFollowing = await this.isFollowing(currentUserId, targetUserId);
       if (isAlreadyFollowing) {
@@ -117,6 +122,11 @@ export class FollowService {
   async unfollowUser(currentUserId: string, targetUserId: string): Promise<{ success: boolean; message: string }> {
     try {
       console.log(`${currentUserId} unfollowing user: ${targetUserId}`);
+      
+      // Prevent self-unfollow
+      if (currentUserId === targetUserId) {
+        return { success: false, message: 'Cannot unfollow yourself' };
+      }
       
       // Check if currently following
       const isCurrentlyFollowing = await this.isFollowing(currentUserId, targetUserId);
