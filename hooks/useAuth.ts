@@ -12,6 +12,7 @@ export function useAuth() {
   // Force refresh authentication state
   const refreshAuth = useCallback(async () => {
     try {
+      console.log('🔄 RefreshAuth called');
       setLoading(true);
       const localSession = await sessionStorage.getStoredSession();
       console.log('🔄 RefreshAuth: Local session:', localSession?.email || 'none');
@@ -29,15 +30,17 @@ export function useAuth() {
         } as User;
         console.log('✅ RefreshAuth: Setting user:', mockUser.email, 'ID:', mockUser.id);
         setUser(mockUser);
+        setInitialized(true);
       } else {
         console.log('❌ RefreshAuth: No session, clearing user');
         setUser(null);
+        setInitialized(true);
       }
     } catch (error) {
       console.error('❌ RefreshAuth error:', error);
       setUser(null);
-    } finally {
       setInitialized(true);
+    } finally {
       setLoading(false);
     }
   }, []);
@@ -48,8 +51,10 @@ export function useAuth() {
 
     const initializeAuth = async () => {
       try {
+        console.log('🔄 Initializing auth...');
         setLoading(true);
         const localSession = await sessionStorage.getStoredSession();
+        console.log('📱 Local session found:', localSession?.email || 'none');
         
         if (localSession && mounted) {
           const mockUser = {
@@ -62,16 +67,20 @@ export function useAuth() {
             created_at: localSession.lastLogin,
             updated_at: localSession.lastLogin
           } as User;
+          console.log('✅ Setting user from local session:', mockUser.email);
           setUser(mockUser);
         } else if (mounted) {
+          console.log('❌ No local session, clearing user');
           setUser(null);
         }
       } catch (error) {
+        console.error('❌ Error initializing auth:', error);
         if (mounted) setUser(null);
       } finally {
         if (mounted) {
           setLoading(false);
           setInitialized(true);
+          console.log('✅ Auth initialization complete');
         }
       }
     };

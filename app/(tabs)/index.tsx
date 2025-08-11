@@ -31,7 +31,14 @@ export default function HomeScreen() {
   const loadingRef = useRef(false);
 
   const loadActivities = useCallback(async () => {
-    if (loadingRef.current) return; 
+    if (loadingRef.current || !isAuthenticated || !user) {
+      console.log('🚫 Skipping loadActivities:', { 
+        loading: loadingRef.current, 
+        isAuthenticated, 
+        hasUser: !!user 
+      });
+      return;
+    }
     
     console.log('🔍 loadActivities called with:', { 
       isAuthenticated, 
@@ -42,23 +49,19 @@ export default function HomeScreen() {
     loadingRef.current = true;
     setIsLoading(true);
     try {
-      if (isAuthenticated && user) {
-        console.log(`🏠 Loading activities for user: ${user.email} (ID: ${user.id})`);
-        const [recentActivities, stats, profile] = await Promise.all([
-          activityService.getRecentActivities(5, user.id),
-          activityService.getTotalStats(user.id),
-          ProfileService.getProfile(user.id)
-        ]);
-        
-        console.log(`📊 Loaded ${recentActivities.length} activities, stats:`, stats);
-        console.log(`👤 Profile loaded:`, profile);
-        setActivities(recentActivities);
-        setTotalStats(stats);
-        setUserName(profile?.name || user.email?.split('@')[0] || 'User');
-        setUserAvatar(profile?.avatar || null);
-      } else {
-        console.log('❌ Not authenticated or no user:', { isAuthenticated, hasUser: !!user });
-      }
+      console.log(`🏠 Loading activities for user: ${user.email} (ID: ${user.id})`);
+      const [recentActivities, stats, profile] = await Promise.all([
+        activityService.getRecentActivities(5, user.id),
+        activityService.getTotalStats(user.id),
+        ProfileService.getProfile(user.id)
+      ]);
+      
+      console.log(`📊 Loaded ${recentActivities.length} activities, stats:`, stats);
+      console.log(`👤 Profile loaded:`, profile);
+      setActivities(recentActivities);
+      setTotalStats(stats);
+      setUserName(profile?.name || user.email?.split('@')[0] || 'User');
+      setUserAvatar(profile?.avatar || null);
     } catch (error) {
       console.error('❌ Error loading home data:', error);
     } finally {
@@ -79,13 +82,14 @@ export default function HomeScreen() {
         isAuthenticated, 
         user: user ? { id: user.id, email: user.email } : null 
       });
-      if (initialized && isAuthenticated) {
+      
+      if (initialized && isAuthenticated && user) {
         console.log('✅ Auth check passed, loading activities...');
         loadActivities();
-      } else {
+      } else if (initialized) {
         console.log('❌ Auth check failed - not loading activities');
       }
-    }, [initialized, isAuthenticated, loadActivities])
+    }, [initialized, isAuthenticated, user, loadActivities])
   );
 
   if (!initialized || loading) {

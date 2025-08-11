@@ -1,4 +1,4 @@
-import { followService } from '@/lib/followService';
+import { followService, setFollowStatsEmitter } from '@/lib/followService';
 import { useCallback, useEffect, useState } from 'react';
 
 export interface FollowStats {
@@ -9,6 +9,11 @@ export interface FollowStats {
 // Simple event emitter untuk React Native compatibility
 class FollowStatsEmitter {
   private listeners: Array<(userId: string, stats: FollowStats) => void> = [];
+
+  constructor() {
+    // Set the emitter reference in followService
+    setFollowStatsEmitter(this);
+  }
 
   subscribe(callback: (userId: string, stats: FollowStats) => void) {
     this.listeners.push(callback);

@@ -6,6 +6,14 @@ export interface FollowStats {
   following: number;
 }
 
+// Import the emitter from useFollowStats
+let followStatsEmitter: any = null;
+
+// Function to set the emitter reference
+export const setFollowStatsEmitter = (emitter: any) => {
+  followStatsEmitter = emitter;
+};
+
 export class FollowService {
   private static instance: FollowService;
 
@@ -96,20 +104,31 @@ export class FollowService {
         return { success: false, message: 'Already following this user' };
       }
 
-      // Add to mock follows
+      // Add to current user's following list
       const follows = await this.getMockFollows(currentUserId);
       follows.push(targetUserId);
       await this.saveMockFollows(currentUserId, follows);
 
-      // Update stats
-      const stats = await this.getMockStats(currentUserId);
-      stats.following += 1;
-      await this.saveMockStats(currentUserId, stats);
+      // Update current user's following count
+      const currentUserStats = await this.getMockStats(currentUserId);
+      currentUserStats.following += 1;
+      await this.saveMockStats(currentUserId, currentUserStats);
 
-      console.log(`${currentUserId} successfully followed user: ${targetUserId}. New stats:`, stats);
+      // Update target user's followers count
+      const targetUserStats = await this.getMockStats(targetUserId);
+      targetUserStats.followers += 1;
+      await this.saveMockStats(targetUserId, targetUserStats);
+
+      console.log(`✅ Follow successful:`, {
+        currentUser: currentUserId,
+        currentUserStats,
+        targetUser: targetUserId,
+        targetUserStats
+      });
       
-      // Trigger stats update for real-time UI refresh
-      this.triggerStatsUpdate(currentUserId);
+      // Trigger stats update for both users
+      await this.triggerStatsUpdate(currentUserId);
+      await this.triggerStatsUpdate(targetUserId);
       
       return { success: true, message: 'Successfully followed user' };
     } catch (error) {
@@ -134,20 +153,31 @@ export class FollowService {
         return { success: false, message: 'Not following this user' };
       }
 
-      // Remove from mock follows
+      // Remove from current user's following list
       const follows = await this.getMockFollows(currentUserId);
       const updatedFollows = follows.filter(id => id !== targetUserId);
       await this.saveMockFollows(currentUserId, updatedFollows);
 
-      // Update stats
-      const stats = await this.getMockStats(currentUserId);
-      stats.following = Math.max(0, stats.following - 1);
-      await this.saveMockStats(currentUserId, stats);
+      // Update current user's following count
+      const currentUserStats = await this.getMockStats(currentUserId);
+      currentUserStats.following = Math.max(0, currentUserStats.following - 1);
+      await this.saveMockStats(currentUserId, currentUserStats);
 
-      console.log(`${currentUserId} successfully unfollowed user: ${targetUserId}. New stats:`, stats);
+      // Update target user's followers count
+      const targetUserStats = await this.getMockStats(targetUserId);
+      targetUserStats.followers = Math.max(0, targetUserStats.followers - 1);
+      await this.saveMockStats(targetUserId, targetUserStats);
+
+      console.log(`✅ Unfollow successful:`, {
+        currentUser: currentUserId,
+        currentUserStats,
+        targetUser: targetUserId,
+        targetUserStats
+      });
       
-      // Trigger stats update for real-time UI refresh
-      this.triggerStatsUpdate(currentUserId);
+      // Trigger stats update for both users
+      await this.triggerStatsUpdate(currentUserId);
+      await this.triggerStatsUpdate(targetUserId);
       
       return { success: true, message: 'Successfully unfollowed user' };
     } catch (error) {
@@ -239,13 +269,23 @@ export class FollowService {
   }
 
   // Trigger stats update for real-time UI refresh
-  private triggerStatsUpdate(userId: string): void {
-    // This would typically emit an event or call a callback
-    // For now, we'll use a simple timeout to allow async operations to complete
-    setTimeout(() => {
+  private async triggerStatsUpdate(userId: string): Promise<void> {
+    try {
       console.log(`🔔 Triggering stats update for user: ${userId}`);
-      // In a full implementation, this would emit events or call React context updates
-    }, 100);
+      
+      // Get updated stats from storage
+      const updatedStats = await this.getFollowStats(userId);
+      console.log(`� Updated stats for ${userId}:`, updatedStats);
+      
+      // If emitter is available, use it to notify subscribers
+      if (followStatsEmitter) {
+        await followStatsEmitter.updateStats(userId);
+      } else {
+        console.log('⚠️ followStatsEmitter not available, stats update may not be reflected in UI');
+      }
+    } catch (error) {
+      console.error('Error triggering stats update:', error);
+    }
   }
 
   // Search users (with Supabase integration and mock fallback)
