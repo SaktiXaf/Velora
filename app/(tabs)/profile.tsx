@@ -134,7 +134,9 @@ export default function ProfileScreen() {
       if (profile) {
         console.log('👤 Profile loaded, preserving follow stats:', {
           currentFollowers: userData.stats.followers,
-          currentFollowing: userData.stats.following
+          currentFollowing: userData.stats.following,
+          avatarFound: !!profile.avatar,
+          avatarUrl: profile.avatar
         });
         
         setUserData(prev => ({
@@ -196,6 +198,7 @@ export default function ProfileScreen() {
       setEditedBio(userData.bio);
       setEditedAvatar(userData.avatar);
       setEditedAge(userData.age ? userData.age.toString() : '');
+      console.log('📱 Edit mode: Avatar loaded ->', userData.avatar ? 'Has avatar' : 'No avatar');
     }
   }, [isEditing]);
 
@@ -253,11 +256,30 @@ export default function ProfileScreen() {
         return;
       }
 
+      let avatarUrl = editedAvatar;
+      
+      // If avatar was changed and is a local file, try to upload it
+      if (editedAvatar && editedAvatar !== userData.avatar && editedAvatar.startsWith('file://')) {
+        console.log('📸 Uploading new avatar...');
+        try {
+          const uploadedUrl = await ProfileService.uploadAvatar(user.id, editedAvatar);
+          if (uploadedUrl) {
+            avatarUrl = uploadedUrl;
+            console.log('✅ Avatar uploaded successfully');
+          } else {
+            console.log('⚠️ Avatar upload failed, using local URI');
+          }
+        } catch (error) {
+          console.error('❌ Avatar upload error:', error);
+          console.log('💾 Using local avatar URI as fallback');
+        }
+      }
+
       const updates = {
         name: editedName.trim(),
         bio: editedBio.trim(),
         age: ageNumber,
-        avatar: editedAvatar || undefined,
+        avatar: avatarUrl || undefined,
       };
 
       const success = await ProfileService.updateProfile(user.id, updates);
@@ -268,10 +290,11 @@ export default function ProfileScreen() {
           name: editedName.trim(),
           bio: editedBio.trim(),
           age: ageNumber || null,
-          avatar: editedAvatar,
+          avatar: avatarUrl,
         }));
         setIsEditing(false);
         Alert.alert('Success', 'Profile updated successfully!');
+        console.log('📱 Profile updated with avatar:', avatarUrl ? 'Has avatar' : 'No avatar');
       } else {
         Alert.alert('Error', 'Failed to update profile');
       }
@@ -503,25 +526,6 @@ export default function ProfileScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity 
-          style={[styles.refreshButton, { backgroundColor: colors.surface }]}
-          onPress={async () => {
-            console.log('🔄 Manual refresh button pressed');
-            if (refreshStats) {
-              await refreshStats();
-            }
-            if (user) {
-              await loadUserProfile(user.id);
-            }
-          }}
-        >
-          <Ionicons 
-            name="refresh" 
-            size={24} 
-            color={colors.primary} 
-          />
-        </TouchableOpacity>
-
-        <TouchableOpacity 
           style={[styles.editButton, { backgroundColor: colors.surface }]}
           onPress={() => setIsEditing(!isEditing)}
         >
@@ -667,19 +671,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: Theme.spacing.md,
     right: Theme.spacing.md + 60, // Position to the left of edit button
-    padding: Theme.spacing.sm,
-    backgroundColor: Theme.colors.white,
-    borderRadius: Theme.borderRadius.full,
-    shadowColor: Theme.colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  refreshButton: {
-    position: 'absolute',
-    top: Theme.spacing.md,
-    right: Theme.spacing.md + 120, // Position to the left of theme button
     padding: Theme.spacing.sm,
     backgroundColor: Theme.colors.white,
     borderRadius: Theme.borderRadius.full,

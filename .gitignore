@@ -36,4 +36,7 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
+# Duplicate/nested repositories
+Velora/
+
 app-example

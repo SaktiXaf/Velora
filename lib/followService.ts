@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { notificationService } from './notificationService';
 import { supabase, testSupabaseConnection } from './supabase';
 
 export interface FollowStats {
@@ -125,6 +126,16 @@ export class FollowService {
         targetUser: targetUserId,
         targetUserStats
       });
+      
+      // Add follow notification to target user
+      try {
+        // In a real app, you'd get the follower's username from user profile
+        const followerUsername = `user_${currentUserId.slice(-4)}`; // Mock username
+        await notificationService.addFollowNotification(targetUserId, followerUsername);
+        console.log('📱 Follow notification sent to:', targetUserId);
+      } catch (error) {
+        console.error('Error sending follow notification:', error);
+      }
       
       // Trigger stats update for both users
       await this.triggerStatsUpdate(currentUserId);

@@ -1,4 +1,5 @@
 import { clearAuthChangeCallback, setAuthChangeCallback } from '@/lib/authService';
+import { ProfileService } from '@/lib/profileService';
 import { sessionStorage } from '@/lib/sessionStorage';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
@@ -31,6 +32,10 @@ export function useAuth() {
         console.log('✅ RefreshAuth: Setting user:', mockUser.email, 'ID:', mockUser.id);
         setUser(mockUser);
         setInitialized(true);
+        
+        // Force sync profile and avatar from server for cross-device consistency
+        console.log('📱 Force syncing profile for cross-device login...');
+        await ProfileService.forceProfileSync(mockUser.id);
       } else {
         console.log('❌ RefreshAuth: No session, clearing user');
         setUser(null);
@@ -69,6 +74,10 @@ export function useAuth() {
           } as User;
           console.log('✅ Setting user from local session:', mockUser.email);
           setUser(mockUser);
+          
+          // Force sync profile and avatar for cross-device consistency
+          console.log('📱 Syncing profile on auth initialization...');
+          await ProfileService.forceProfileSync(mockUser.id);
         } else if (mounted) {
           console.log('❌ No local session, clearing user');
           setUser(null);
@@ -94,6 +103,10 @@ export function useAuth() {
             console.log('✅ Auth: Setting Supabase user:', session.user.email);
             setUser(session.user);
             await sessionStorage.saveSession(session.user);
+            
+            // Sync profile on Supabase auth change
+            console.log('📱 Syncing profile on Supabase auth change...');
+            await ProfileService.forceProfileSync(session.user.id);
           } else {
             console.log('❌ Auth: Clearing user');
             setUser(null);
@@ -113,6 +126,11 @@ export function useAuth() {
         setUser(mockUser);
         setLoading(false);
         setInitialized(true);
+        
+        // Sync profile on mock auth change
+        console.log('📱 Syncing profile on mock auth change...');
+        await ProfileService.forceProfileSync(mockUser.id);
+        
         // Force a small delay to ensure state propagation
         await new Promise(resolve => setTimeout(resolve, 100));
       }

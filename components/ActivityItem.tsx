@@ -89,7 +89,7 @@ const styles = StyleSheet.create({
     borderRadius: Theme.borderRadius.lg,
     padding: Theme.spacing.md,
     marginHorizontal: Theme.spacing.md,
-    marginVertical: Theme.spacing.xs,
+    marginVertical: Theme.spacing.sm,
     borderWidth: 1,
     elevation: 2,
     shadowColor: '#000',

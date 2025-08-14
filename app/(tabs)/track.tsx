@@ -426,23 +426,6 @@ export default function TrackScreen() {
       <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
         <Text style={[styles.title, { color: colors.text }]}>Track Activity</Text>
         <View style={styles.headerRight}>
-          {/* Login Status Indicator */}
-          {!authLoading && (
-            <View style={[styles.loginStatus, isAuthenticated ? 
-              { backgroundColor: colors.success } : 
-              { backgroundColor: colors.warning }
-            ]}>
-              <Ionicons 
-                name={isAuthenticated ? "checkmark-circle" : "person-outline"} 
-                size={16} 
-                color={colors.background} 
-              />
-              <Text style={[styles.loginStatusText, { color: colors.background }]}>
-                {isAuthenticated ? 'Logged In' : 'Not Logged In'}
-              </Text>
-            </View>
-          )}
-          
           {/* Recording Status */}
           {isTracking && (
             <View style={styles.statusBadge}>
@@ -585,18 +568,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Theme.spacing.sm,
-  },
-  loginStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Theme.spacing.sm,
-    paddingVertical: Theme.spacing.xs,
-    borderRadius: Theme.borderRadius.sm,
-    gap: Theme.spacing.xs,
-  },
-  loginStatusText: {
-    fontSize: Theme.typography.fontSize.xs,
-    fontFamily: Theme.typography.fontFamily.medium,
   },
   warningBanner: {
     flexDirection: 'row',

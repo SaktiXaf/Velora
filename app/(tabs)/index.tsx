@@ -1,9 +1,11 @@
 import ActivityItem from '@/components/ActivityItem';
 import { FloatingActionButton } from '@/components/FloatingActionButton';
+import NotificationModal from '@/components/NotificationModal';
 import SearchScreen from '@/components/SearchScreen';
 import { Theme } from '@/constants/Theme';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/hooks/useAuth';
+import { useNotifications } from '@/hooks/useNotifications';
 import { Activity, activityService } from '@/lib/activityService';
 import { ProfileService } from '@/lib/profileService';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,7 +30,11 @@ export default function HomeScreen() {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
+  const [showNotificationModal, setShowNotificationModal] = useState(false);
   const loadingRef = useRef(false);
+
+  // Notifications hook
+  const { unreadCount } = useNotifications(user?.id || '');
 
   const loadActivities = useCallback(async () => {
     if (loadingRef.current || !isAuthenticated || !user) {
@@ -142,6 +148,20 @@ export default function HomeScreen() {
         <View style={styles.headerActions}>
           <TouchableOpacity 
             style={styles.iconButton}
+            onPress={() => setShowNotificationModal(true)}
+          >
+            <Ionicons name="notifications-outline" size={24} color={colors.text} />
+            {unreadCount > 0 && (
+              <View style={[styles.notificationBadge, { backgroundColor: colors.error }]}>
+                <Text style={[styles.badgeText, { color: colors.white }]}>
+                  {unreadCount > 99 ? '99+' : unreadCount.toString()}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.iconButton}
             onPress={() => setShowSearchModal(true)}
           >
             <Ionicons name="search-outline" size={24} color={colors.text} />
@@ -232,6 +252,7 @@ export default function HomeScreen() {
 
       <FloatingActionButton onPress={handleNewActivity} />
 
+      {/* Search Modal */}
       <Modal
         visible={showSearchModal}
         animationType="slide"
@@ -241,6 +262,13 @@ export default function HomeScreen() {
           onClose={() => setShowSearchModal(false)}
         />
       </Modal>
+
+      {/* Notification Modal */}
+      <NotificationModal
+        visible={showNotificationModal}
+        onClose={() => setShowNotificationModal(false)}
+        currentUserId={user?.id || ''}
+      />
     </SafeAreaView>
   );
 }
@@ -272,6 +300,25 @@ const styles = StyleSheet.create({
   iconButton: {
     padding: Theme.spacing.xs,
     marginLeft: Theme.spacing.sm,
+    position: 'relative',
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: Theme.colors.error,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  badgeText: {
+    fontSize: 10,
+    fontFamily: Theme.typography.fontFamily.bold,
+    color: Theme.colors.white,
+    textAlign: 'center',
   },
   listContent: {
     paddingBottom: Theme.spacing.xl,
