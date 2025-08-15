@@ -56,42 +56,43 @@ export const AuthService = {
         id: authData.user.id,
         name: userData.name,
         email: userData.email,
-        phone: userData.phone,
-        address: userData.address,
+        username: userData.email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, ''),
+        bio: `User from ${userData.address}. Phone: ${userData.phone}`,
+        is_active: true
       };
 
-      console.log('AuthService: Inserting profile with data:', profileData);
+      console.log('AuthService: Inserting user profile with data:', profileData);
 
       const { data: profile, error: profileError } = await supabase
-        .from('profiles')
+        .from('users')
         .insert([profileData])
         .select()
         .single();
 
       if (profileError) {
-        console.error('AuthService: Profile creation error:', profileError);
+        console.error('AuthService: User profile creation error:', profileError);
         
         if (profileError.code === '42501') {
           console.log('AuthService: RLS error detected, trying alternative approach...');
           
           const { data: upsertProfile, error: upsertError } = await supabase
-            .from('profiles')
+            .from('users')
             .upsert([profileData], { onConflict: 'id' })
             .select()
             .single();
 
           if (upsertError) {
             console.error('AuthService: Upsert also failed:', upsertError);
-            throw new Error(`Profile creation failed: ${profileError.message}`);
+            throw new Error(`User profile creation failed: ${profileError.message}`);
           }
 
           return { user: authData.user, profile: upsertProfile };
         }
         
-        throw new Error(`Profile creation failed: ${profileError.message}`);
+        throw new Error(`User profile creation failed: ${profileError.message}`);
       }
 
-      console.log('AuthService: Profile created successfully:', profile);
+      console.log('AuthService: User profile created successfully:', profile);
       
       // Save session locally after successful registration
       if (authData.user) {
@@ -109,70 +110,91 @@ export const AuthService = {
 
   async loginUser(emailOrName: string, password: string) {
     try {
-      console.log('AuthService: Starting login...');
+      console.log('🔐 AuthService: Starting login process...');
       let email = emailOrName.trim();
 
+      // If input is not email, try to find email by name/username
       if (!email.includes('@')) {
-        console.log('AuthService: Looking up email by name:', email);
-        const { data: profiles, error: searchError } = await supabase
-          .from('profiles')
+        console.log('🔍 AuthService: Looking up email by name/username:', email);
+        
+        // Try to find by name first
+        let { data: userData, error: searchError } = await supabase
+          .from('users')
           .select('email')
           .eq('name', email)
           .single();
 
-        if (searchError || !profiles) {
-          throw new Error('Username not found');
+        // If not found by name, try by username
+        if (searchError || !userData) {
+          console.log('🔍 AuthService: Not found by name, trying username...');
+          const result = await supabase
+            .from('users')
+            .select('email')
+            .eq('username', email)
+            .single();
+          
+          userData = result.data;
+          searchError = result.error;
         }
-        email = profiles.email;
+
+        if (searchError || !userData) {
+          throw new Error('Username atau nama tidak ditemukan');
+        }
+        
+        email = userData.email;
+        console.log('✅ AuthService: Found email for user:', email);
       }
 
       // Try Supabase login first
-      console.log('AuthService: Attempting Supabase login...');
+      console.log('🔑 AuthService: Attempting Supabase login with email:', email);
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email,
         password: password,
       });
 
       if (error) {
-        console.log('AuthService: Supabase login failed:', error.message);
+        console.log('❌ AuthService: Supabase login failed:', error.message);
         
         // If it's email confirmation issue, try mock login as fallback
         if (error.message.includes('Invalid login credentials') || 
-            error.message.includes('Email not confirmed')) {
+            error.message.includes('Email not confirmed') ||
+            error.message.includes('Invalid')) {
           
-          console.log('AuthService: Trying mock login fallback...');
+          console.log('🔄 AuthService: Trying mock login fallback...');
           
-          // Check if user exists in profiles table
-          const { data: profileData, error: profileError } = await supabase
-            .from('profiles')
+          // Check if user exists in users table
+          const { data: userData, error: userError } = await supabase
+            .from('users')
             .select('*')
             .eq('email', email)
             .single();
           
-          if (!profileError && profileData) {
-            console.log('AuthService: User found in profiles, creating mock session...');
+          if (!userError && userData) {
+            console.log('👤 AuthService: User found in users table, creating mock session...');
             
             // Create a mock user object for local session
             const mockUser = {
-              id: profileData.id,
-              email: profileData.email,
+              id: userData.id,
+              email: userData.email,
               user_metadata: {
-                name: profileData.name,
-                phone: profileData.phone,
-                address: profileData.address
+                name: userData.name,
+                username: userData.username,
+                bio: userData.bio,
+                avatar: userData.avatar,
+                age: userData.age
               },
               app_metadata: {},
               aud: 'authenticated',
               role: 'authenticated',
-              created_at: profileData.created_at,
-              updated_at: profileData.updated_at
+              created_at: userData.created_at,
+              updated_at: userData.updated_at
             };
             
             // Save mock session locally
             await sessionStorage.saveSession(mockUser);
             console.log('✅ AuthService: Mock login successful for:', mockUser.email);
             
-            // Trigger callback if available - ALWAYS call this
+            // Trigger callback if available
             console.log('🔔 Triggering auth callback for mock user:', mockUser.email);
             if (authChangeCallback) {
               authChangeCallback(mockUser);
@@ -191,6 +213,9 @@ export const AuthService = {
                 refresh_token: 'mock-refresh'
               }
             };
+          } else {
+            console.log('❌ AuthService: User not found in users table');
+            throw new Error('User tidak ditemukan di database');
           }
         }
         

@@ -79,7 +79,7 @@ export const RegistrationService = {
         console.log(`RegistrationService: Insert attempt ${attempt}/3`);
         
         const result = await supabase
-          .from('profiles')
+          .from('users')
           .insert([profileData])
           .select()
           .single();
@@ -170,7 +170,7 @@ export const RegistrationService = {
 
       // Try direct insert without foreign key dependency
       const { data: profile2, error: error2 } = await supabase
-        .from('profiles')
+        .from('users')
         .upsert(manualProfileData, { 
           onConflict: 'id',
           ignoreDuplicates: false 
@@ -297,7 +297,7 @@ export const RegistrationService = {
         try {
           // First, let's see what's in the database
           const { data: allUsers, error: debugError } = await supabase
-            .from('profiles')
+            .from('users')
             .select('name, email')
             .limit(10);
           

@@ -10,7 +10,7 @@ class DirectAuthService {
 
       // Try to get or create user directly
       const { data: existingUser, error: userError } = await supabase
-        .from('profiles')
+        .from('users')
         .select('*')
         .eq('email', finalEmail)
         .single();
@@ -21,7 +21,7 @@ class DirectAuthService {
         // Create user directly in profiles table
         userId = crypto.randomUUID();
         const { error: createError } = await supabase
-          .from('profiles')
+          .from('users')
           .insert({
             id: userId,
             email: finalEmail,
@@ -75,7 +75,7 @@ class DirectAuthService {
 
       // Direct insert to profiles table
         const { data, error } = await supabase
-          .from('profiles')
+          .from('users')
           .insert({
             id: userId,
             email: finalEmail,

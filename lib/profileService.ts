@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AvatarUploadService } from './avatarUploadService';
 import { DatabaseUser, supabase } from './supabase';
 
 export { DatabaseUser };
@@ -74,7 +75,7 @@ export class ProfileService {
       
       // First try to get from server
       const { data, error } = await supabase
-        .from('profiles')
+        .from('users')
         .select('*')
         .eq('id', userId)
         .single();
@@ -142,32 +143,50 @@ export class ProfileService {
 
   static async updateProfile(userId: string, updates: Partial<DatabaseUser>): Promise<boolean> {
     try {
+      console.log('📝 Updating profile for user:', userId);
+      console.log('📝 Updates:', updates);
+
       const { error } = await supabase
-        .from('profiles')
+        .from('users')
         .update(updates)
         .eq('id', userId);
 
       if (error) {
-        console.error('Error updating profile:', error);
+        console.error('❌ Error updating profile in database:', error);
         return false;
       }
+
+      console.log('✅ Profile updated successfully in database');
 
       // Update local cache with new data
       const currentProfile = await this.getCachedProfile(userId);
       if (currentProfile) {
-        const updatedProfile = { ...currentProfile, ...updates };
+        const updatedProfile = { 
+          ...currentProfile, 
+          ...updates,
+          updated_at: new Date().toISOString() 
+        };
         await this.cacheProfile(userId, updatedProfile);
+        console.log('✅ Local cache updated');
       }
 
       // Sync avatar URL if avatar was updated
       if (updates.avatar !== undefined) {
         await this.syncAvatarURL(userId, updates.avatar);
-        console.log('📱 Avatar updated and synced across devices');
+        console.log('✅ Avatar URL synced across devices');
       }
 
       return true;
     } catch (error) {
-      console.error('Error in updateProfile:', error);
+      console.error('❌ Error in updateProfile:', error);
+      
+      // If it's a network error, we could cache the update locally for later sync
+      if (error instanceof TypeError && error.message.includes('Network request failed')) {
+        console.log('🌐 Network error - caching update locally');
+        // TODO: Implement offline update queue
+        return false;
+      }
+      
       return false;
     }
   }
@@ -175,7 +194,7 @@ export class ProfileService {
   static async createProfile(profileData: Omit<DatabaseUser, 'id' | 'created_at'>): Promise<string | null> {
     try {
       const { data, error } = await supabase
-        .from('profiles')
+        .from('users')
         .insert([profileData])
         .select('id')
         .single();
@@ -200,64 +219,21 @@ export class ProfileService {
     }
   }
 
-  static async uploadAvatar(userId: string, file: any): Promise<string | null> {
+  static async uploadAvatar(userId: string, imageUri: string): Promise<string | null> {
     try {
       console.log('📸 Starting avatar upload for user:', userId);
       
-      // First try Supabase storage
-      const fileName = `${userId}_${Date.now()}`;
+      const result = await AvatarUploadService.uploadAvatar(userId, imageUri);
       
-      const { data, error } = await supabase.storage
-        .from('avatars')
-        .upload(fileName, file, {
-          cacheControl: '3600',
-          upsert: true
-        });
-
-      if (error) {
-        console.error('❌ Supabase storage error:', error);
-        
-        if (error.message.includes('Bucket not found')) {
-          console.log('💾 Avatars bucket not found, using local storage fallback');
-        } else if (error.message.includes('Network request failed')) {
-          console.log('🌐 Network error, using local storage fallback');
-        } else {
-          console.log('🔄 Upload failed, using local storage fallback');
-        }
-        
-        // Fallback: Store avatar locally and return local URI
-        if (file && typeof file === 'string') {
-          console.log('💾 Storing avatar locally for cross-device sync');
-          await this.syncAvatarURL(userId, file);
-          return file;
-        }
-        
+      if (result.success && result.url) {
+        console.log('✅ Avatar upload successful');
+        return result.url;
+      } else {
+        console.error('❌ Avatar upload failed:', result.error);
         return null;
       }
-
-      // If successful, get public URL
-      const { data: urlData } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(fileName);
-
-      console.log('✅ Avatar uploaded successfully to Supabase');
-      
-      // Also sync locally for cross-device consistency
-      await this.syncAvatarURL(userId, urlData.publicUrl);
-      
-      return urlData.publicUrl;
     } catch (error) {
       console.error('❌ Error in uploadAvatar:', error);
-      
-      // Network error fallback - store locally
-      if (error instanceof TypeError && error.message.includes('Network request failed')) {
-        console.log('🌐 Network request failed, storing avatar locally');
-        if (file && typeof file === 'string') {
-          await this.syncAvatarURL(userId, file);
-          return file;
-        }
-      }
-      
       return null;
     }
   }
@@ -300,6 +276,37 @@ export class ProfileService {
     } catch (error) {
       console.error('Error getting avatar URL:', error);
       return null;
+    }
+  }
+
+  // Clear all profile cache (for logout)
+  static async clearAllProfileCache(): Promise<void> {
+    try {
+      const allKeys = await AsyncStorage.getAllKeys();
+      const profileKeys = allKeys.filter(key => 
+        key.startsWith(PROFILE_CACHE_PREFIX) || 
+        key.startsWith(AVATAR_CACHE_PREFIX)
+      );
+      
+      if (profileKeys.length > 0) {
+        await AsyncStorage.multiRemove(profileKeys);
+        console.log('🗑️  Cleared all profile cache:', profileKeys.length, 'items');
+      }
+    } catch (error) {
+      console.error('Error clearing profile cache:', error);
+    }
+  }
+
+  // Clear specific user profile cache
+  static async clearUserProfileCache(userId: string): Promise<void> {
+    try {
+      const profileKey = `${PROFILE_CACHE_PREFIX}${userId}`;
+      const avatarKey = `${AVATAR_CACHE_PREFIX}${userId}`;
+      
+      await AsyncStorage.multiRemove([profileKey, avatarKey]);
+      console.log('🗑️  Cleared profile cache for user:', userId);
+    } catch (error) {
+      console.error('Error clearing user profile cache:', error);
     }
   }
 }

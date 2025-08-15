@@ -58,7 +58,7 @@ const FollowListModal: React.FC<FollowListModalProps> = ({
   const loadUsers = async () => {
     setLoading(true);
     try {
-      console.log(`📋 Loading ${type} for user:`, userId);
+      console.log(`📋 Loading real ${type} from server for user:`, userId);
       
       let userList: User[] = [];
       if (type === 'followers') {
@@ -67,10 +67,10 @@ const FollowListModal: React.FC<FollowListModalProps> = ({
         userList = await followService.getFollowingList(userId);
       }
       
-      console.log(`📋 Loaded ${userList.length} ${type}:`, userList);
+      console.log(`✅ Successfully loaded ${userList.length} real ${type}:`, userList);
       setUsers(userList);
     } catch (error) {
-      console.error(`Error loading ${type}:`, error);
+      console.error(`❌ Error loading ${type}:`, error);
       setUsers([]);
     } finally {
       setLoading(false);
@@ -150,7 +150,7 @@ const FollowListModal: React.FC<FollowListModalProps> = ({
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={theme.primary} />
             <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
-              Loading {type}...
+              Loading real {type} from server...
             </Text>
           </View>
         ) : users.length === 0 ? (

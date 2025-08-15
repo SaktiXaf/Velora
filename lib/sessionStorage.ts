@@ -50,6 +50,31 @@ export const sessionStorage = {
     }
   },
 
+  // Clear all user-related data (for complete logout)
+  async clearAllUserData(): Promise<void> {
+    try {
+      // Get all keys to find user-specific data
+      const allKeys = await AsyncStorage.getAllKeys();
+      
+      // Find keys that contain user data
+      const userDataKeys = allKeys.filter(key => 
+        key.includes('profile_cache_') ||
+        key.includes('avatar_cache_') ||
+        key.includes('user_activities_') ||
+        key.includes('notifications_') ||
+        key === STORAGE_KEYS.USER_SESSION
+      );
+      
+      // Remove all user-related data
+      if (userDataKeys.length > 0) {
+        await AsyncStorage.multiRemove(userDataKeys);
+        console.log('🗑️  Cleared all user data:', userDataKeys.length, 'items');
+      }
+    } catch (error) {
+      console.error('❌ Error clearing all user data:', error);
+    }
+  },
+
   async isSessionValid(maxAge: number = 30 * 24 * 60 * 60 * 1000): Promise<boolean> {
     try {
       const session = await this.getStoredSession();

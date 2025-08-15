@@ -1,7 +1,8 @@
 import { Button } from '@/components/Button';
+import { Colors } from '@/constants/Colors';
 import { Theme } from '@/constants/Theme';
 import { useTheme } from '@/contexts/ThemeContext';
-import { RegistrationService } from '@/lib/registrationService';
+import { EnhancedRegistrationService } from '@/lib/enhancedRegistrationService';
 import React, { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -46,7 +47,7 @@ export default function RegisterScreen({ onBack, onSuccess }: RegisterScreenProp
       return;
     }
     if (formData.password !== formData.confirmPassword) {
-      Alert.alert('Error', 'Password dan konfirmasi password tidak sama');
+      Alert.alert('Error', 'Konfirmasi password tidak cocok');
       return;
     }
     if (formData.password.length < 6) {
@@ -54,124 +55,198 @@ export default function RegisterScreen({ onBack, onSuccess }: RegisterScreenProp
       return;
     }
 
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      Alert.alert('Error', 'Format email tidak valid');
+      return;
+    }
+
     setLoading(true);
     try {
-      console.log('Starting registration process...');
-      console.log('Form data:', {
+      console.log('📝 Starting registration process...');
+      console.log('📊 Form data:', {
+        name: formData.name.trim(),
+        email: formData.email.trim(),
+        phone: formData.phone.trim(),
+        address: formData.address.trim()
+      });
+
+      const userData = {
         name: formData.name.trim(),
         email: formData.email.trim(),
         phone: formData.phone.trim(),
         address: formData.address.trim(),
-      });
+        password: formData.password
+      };
 
-      // Use RegistrationService with multiple fallback approaches
-      const result = await RegistrationService.registerUser({
-        name: formData.name.trim(),
-        email: formData.email.trim(),
-        phone: formData.phone.trim(),
-        address: formData.address.trim(),
-        password: formData.password,
-      });
+      console.log('🚀 Calling enhanced registration service...');
+      const result = await EnhancedRegistrationService.registerUser(userData);
+      console.log('✅ Registration service result:', result);
 
-      console.log('Registration successful:', result);
-      Alert.alert('Sukses', 'Registrasi berhasil! Silakan login.', [
-        { text: 'OK', onPress: onSuccess }
-      ]);
-
-    } catch (error) {
-      console.error('Registration error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Terjadi kesalahan saat registrasi';
-      Alert.alert('Registrasi Gagal', errorMessage);
+      if (result.success) {
+        Alert.alert('Sukses', 'Registrasi berhasil!', [
+          { text: 'OK', onPress: onSuccess }
+        ]);
+      } else {
+        // This shouldn't happen with EnhancedRegistrationService as it throws on failure
+        throw new Error('Registration failed');
+      }
+    } catch (error: any) {
+      console.error('❌ Registration error:', error);
+      const errorMessage = error.message || 'Terjadi kesalahan saat registrasi';
+      Alert.alert('Error', errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <ScrollView style={styles.scrollView}>
         <View style={styles.header}>
-          <Button
-            title="← Kembali"
-            onPress={onBack}
-            variant="outline"
-            size="small"
-          />
-          <Text style={[styles.title, { color: colors.text }]}>Daftar Akun</Text>
+          <Text style={[styles.title, { color: colors.text }]}>Daftar Akun Baru</Text>
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+            Bergabung dengan komunitas lari
+          </Text>
         </View>
 
         <View style={styles.form}>
-          <Text style={[styles.label, { color: colors.text }]}>Nama Lengkap</Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
-            value={formData.name}
-            onChangeText={(text) => setFormData(prev => ({ ...prev, name: text }))}
-            placeholder="Masukkan nama lengkap"
-            placeholderTextColor={colors.textSecondary}
-            autoCapitalize="words"
-          />
+          <View style={styles.inputGroup}>
+            <Text style={[styles.label, { color: colors.text }]}>Nama Lengkap</Text>
+            <TextInput
+              style={[
+                styles.input,
+                {
+                  backgroundColor: colors.surface,
+                  color: colors.text,
+                  borderColor: colors.border,
+                },
+              ]}
+              placeholder="Masukkan nama lengkap"
+              placeholderTextColor={colors.textSecondary}
+              value={formData.name}
+              onChangeText={(text) => setFormData(prev => ({ ...prev, name: text }))}
+              editable={!loading}
+            />
+          </View>
 
-          <Text style={[styles.label, { color: colors.text }]}>Email</Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
-            value={formData.email}
-            onChangeText={(text) => setFormData(prev => ({ ...prev, email: text }))}
-            placeholder="Masukkan email"
-            placeholderTextColor={colors.textSecondary}
-            keyboardType="email-address"
-            autoCapitalize="none"
-          />
+          <View style={styles.inputGroup}>
+            <Text style={[styles.label, { color: colors.text }]}>Email</Text>
+            <TextInput
+              style={[
+                styles.input,
+                {
+                  backgroundColor: colors.surface,
+                  color: colors.text,
+                  borderColor: colors.border,
+                },
+              ]}
+              placeholder="Masukkan email"
+              placeholderTextColor={colors.textSecondary}
+              value={formData.email}
+              onChangeText={(text) => setFormData(prev => ({ ...prev, email: text }))}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              editable={!loading}
+            />
+          </View>
 
-          <Text style={[styles.label, { color: colors.text }]}>Nomor HP</Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
-            value={formData.phone}
-            onChangeText={(text) => setFormData(prev => ({ ...prev, phone: text }))}
-            placeholder="Masukkan nomor HP"
-            placeholderTextColor={colors.textSecondary}
-            keyboardType="phone-pad"
-          />
+          <View style={styles.inputGroup}>
+            <Text style={[styles.label, { color: colors.text }]}>Nomor HP</Text>
+            <TextInput
+              style={[
+                styles.input,
+                {
+                  backgroundColor: colors.surface,
+                  color: colors.text,
+                  borderColor: colors.border,
+                },
+              ]}
+              placeholder="Masukkan nomor HP"
+              placeholderTextColor={colors.textSecondary}
+              value={formData.phone}
+              onChangeText={(text) => setFormData(prev => ({ ...prev, phone: text }))}
+              keyboardType="phone-pad"
+              editable={!loading}
+            />
+          </View>
 
-          <Text style={[styles.label, { color: colors.text }]}>Alamat</Text>
-          <TextInput
-            style={[styles.input, styles.textArea, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
-            value={formData.address}
-            onChangeText={(text) => setFormData(prev => ({ ...prev, address: text }))}
-            placeholder="Masukkan alamat lengkap"
-            placeholderTextColor={colors.textSecondary}
-            multiline
-            numberOfLines={3}
-            textAlignVertical="top"
-          />
+          <View style={styles.inputGroup}>
+            <Text style={[styles.label, { color: colors.text }]}>Alamat</Text>
+            <TextInput
+              style={[
+                styles.input,
+                {
+                  backgroundColor: colors.surface,
+                  color: colors.text,
+                  borderColor: colors.border,
+                },
+              ]}
+              placeholder="Masukkan alamat"
+              placeholderTextColor={colors.textSecondary}
+              value={formData.address}
+              onChangeText={(text) => setFormData(prev => ({ ...prev, address: text }))}
+              multiline
+              numberOfLines={2}
+              editable={!loading}
+            />
+          </View>
 
-          <Text style={[styles.label, { color: colors.text }]}>Password</Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
-            value={formData.password}
-            onChangeText={(text) => setFormData(prev => ({ ...prev, password: text }))}
-            placeholder="Masukkan password"
-            placeholderTextColor={colors.textSecondary}
-            secureTextEntry
-          />
+          <View style={styles.inputGroup}>
+            <Text style={[styles.label, { color: colors.text }]}>Password</Text>
+            <TextInput
+              style={[
+                styles.input,
+                {
+                  backgroundColor: colors.surface,
+                  color: colors.text,
+                  borderColor: colors.border,
+                },
+              ]}
+              placeholder="Masukkan password"
+              placeholderTextColor={colors.textSecondary}
+              value={formData.password}
+              onChangeText={(text) => setFormData(prev => ({ ...prev, password: text }))}
+              secureTextEntry
+              editable={!loading}
+            />
+          </View>
 
-          <Text style={[styles.label, { color: colors.text }]}>Konfirmasi Password</Text>
-          <TextInput
-            style={[styles.input, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
-            value={formData.confirmPassword}
-            onChangeText={(text) => setFormData(prev => ({ ...prev, confirmPassword: text }))}
-            placeholder="Masukkan ulang password"
-            placeholderTextColor={colors.textSecondary}
-            secureTextEntry
-          />
+          <View style={styles.inputGroup}>
+            <Text style={[styles.label, { color: colors.text }]}>Konfirmasi Password</Text>
+            <TextInput
+              style={[
+                styles.input,
+                {
+                  backgroundColor: colors.surface,
+                  color: colors.text,
+                  borderColor: colors.border,
+                },
+              ]}
+              placeholder="Konfirmasi password"
+              placeholderTextColor={colors.textSecondary}
+              value={formData.confirmPassword}
+              onChangeText={(text) => setFormData(prev => ({ ...prev, confirmPassword: text }))}
+              secureTextEntry
+              editable={!loading}
+            />
+          </View>
+        </View>
 
+        <View style={styles.buttonContainer}>
           <Button
-            title={loading ? "Mendaftar..." : "Daftar"}
+            title={loading ? 'Mendaftar...' : 'Daftar'}
             onPress={handleRegister}
-            variant="primary"
-            size="large"
             disabled={loading}
           />
-
+          
+          <Button
+            title="Kembali"
+            onPress={onBack}
+            variant="secondary"
+            disabled={loading}
+          />
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -182,36 +257,42 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  scrollContent: {
-    flexGrow: 1,
+  scrollView: {
+    flex: 1,
     padding: Theme.spacing.lg,
   },
   header: {
     marginBottom: Theme.spacing.xl,
   },
   title: {
-    fontSize: Theme.typography.fontSize.xxl,
-    fontFamily: Theme.typography.fontFamily.bold,
-    textAlign: 'center',
-    marginTop: Theme.spacing.md,
+    fontSize: 28,
+    fontWeight: 'bold',
+    marginBottom: Theme.spacing.sm,
+  },
+  subtitle: {
+    fontSize: 16,
+    lineHeight: 24,
   },
   form: {
-    gap: Theme.spacing.md,
+    marginBottom: Theme.spacing.xl,
+  },
+  inputGroup: {
+    marginBottom: Theme.spacing.lg,
   },
   label: {
-    fontSize: Theme.typography.fontSize.md,
-    fontFamily: Theme.typography.fontFamily.medium,
+    fontSize: 16,
+    fontWeight: '600',
     marginBottom: Theme.spacing.xs,
   },
   input: {
+    borderWidth: 1,
     borderRadius: Theme.borderRadius.md,
     padding: Theme.spacing.md,
-    fontSize: Theme.typography.fontSize.md,
-    fontFamily: Theme.typography.fontFamily.regular,
-    borderWidth: 1,
+    fontSize: 16,
+    minHeight: 50,
   },
-  textArea: {
-    height: 80,
-    textAlignVertical: 'top',
+  buttonContainer: {
+    gap: Theme.spacing.md,
+    marginBottom: Theme.spacing.xl,
   },
 });

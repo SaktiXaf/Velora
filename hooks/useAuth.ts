@@ -1,4 +1,5 @@
 import { clearAuthChangeCallback, setAuthChangeCallback } from '@/lib/authService';
+import { authEventEmitter } from '@/lib/authEvents';
 import { ProfileService } from '@/lib/profileService';
 import { sessionStorage } from '@/lib/sessionStorage';
 import { supabase } from '@/lib/supabase';
@@ -120,22 +121,33 @@ export function useAuth() {
 
     // Mock auth callback - force state update
     const handleMockAuthChange = async (mockUser: any) => {
-      console.log('🔔 Mock auth callback:', mockUser?.email || 'no user');
+      console.log('🔔 Mock auth callback triggered:', mockUser?.email || 'no user');
       if (mounted && mockUser) {
-        console.log('✅ Mock: Setting user:', mockUser.email);
+        console.log('✅ Mock: Setting user state:', mockUser.email, 'ID:', mockUser.id);
         setUser(mockUser);
         setLoading(false);
         setInitialized(true);
         
         // Sync profile on mock auth change
         console.log('📱 Syncing profile on mock auth change...');
-        await ProfileService.forceProfileSync(mockUser.id);
+        try {
+          await ProfileService.forceProfileSync(mockUser.id);
+        } catch (error) {
+          console.error('Profile sync error:', error);
+        }
         
         // Force a small delay to ensure state propagation
         await new Promise(resolve => setTimeout(resolve, 100));
+        console.log('✅ Mock auth state updated successfully');
+        
+        // Emit auth change event to all listeners
+        authEventEmitter.emit();
+      } else {
+        console.log('❌ Mock auth callback: mounted =', mounted, 'user =', !!mockUser);
       }
     };
 
+    console.log('🔧 Setting up auth change callback...');
     setAuthChangeCallback(handleMockAuthChange);
     initializeAuth();
 
@@ -151,19 +163,28 @@ export function useAuth() {
       setLoading(true);
       console.log('🚪 Signing out user:', user?.email);
       
-      // Clear all local session data
-      await sessionStorage.clearSession();
+      // Clear all user-related data completely
+      await sessionStorage.clearAllUserData();
+      
+      // Clear profile cache
+      await ProfileService.clearAllProfileCache();
       
       // Clear Supabase session
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
       
-      console.log('✅ Sign out successful');
+      // Force clear user state
+      setUser(null);
+      setInitialized(true);
+      
+      console.log('✅ Complete sign out successful - all user data cleared');
     } catch (error) {
       console.error('Sign out failed:', error);
+      // Force clear even if there's an error
+      setUser(null);
+      setInitialized(true);
       throw error;
     } finally {
-      setUser(null);
       setLoading(false);
     }
   }, [user?.email]);

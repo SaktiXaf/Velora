@@ -1,5 +1,6 @@
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
+import EditProfileModal, { ProfileUpdateData } from '@/components/EditProfileModal';
 import FollowListModal from '@/components/FollowListModal';
 import LoginScreen from '@/components/LoginScreen';
 import { ProfileImagePicker } from '@/components/ProfileImagePicker';
@@ -9,11 +10,12 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useFollowStats } from '@/hooks/useFollowStats';
 import { activityService } from '@/lib/activityService';
+import { authEventEmitter } from '@/lib/authEvents';
 import { ProfileService } from '@/lib/profileService';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 interface UserData {
@@ -58,10 +60,6 @@ export default function ProfileScreen() {
   const [showRegisterScreen, setShowRegisterScreen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [userData, setUserData] = useState(initialUser);
-  const [editedName, setEditedName] = useState('');
-  const [editedBio, setEditedBio] = useState('');
-  const [editedAvatar, setEditedAvatar] = useState<string | null>(null);
-  const [editedAge, setEditedAge] = useState('');
   const [loading, setLoading] = useState(false);
   
   // Follow list modal states
@@ -192,29 +190,45 @@ export default function ProfileScreen() {
     }
   };
 
-  React.useEffect(() => {
-    if (isEditing) {
-      setEditedName(userData.name);
-      setEditedBio(userData.bio);
-      setEditedAvatar(userData.avatar);
-      setEditedAge(userData.age ? userData.age.toString() : '');
-      console.log('📱 Edit mode: Avatar loaded ->', userData.avatar ? 'Has avatar' : 'No avatar');
-    }
-  }, [isEditing]);
-
   const handleLoginSuccess = async (userData: any) => {
     console.log('✅ Login successful in profile screen:', userData);
+    console.log('🔧 Current auth state before refresh:', { isAuthenticated, user: user?.email });
+    
     setShowLoginScreen(false);
     
     // Force refresh auth state to recognize mock session
     console.log('🔄 Calling refreshAuth to update authentication state...');
-    await refreshAuth?.();
+    try {
+      await refreshAuth?.();
+      console.log('✅ First refreshAuth completed');
+    } catch (error) {
+      console.error('❌ RefreshAuth error:', error);
+    }
+    
+    // Emit auth event to trigger updates in all components
+    setTimeout(() => {
+      console.log('📢 Emitting auth event after login...');
+      authEventEmitter.emit();
+    }, 300);
     
     // Force a small delay to ensure auth state updates
     setTimeout(async () => {
-      console.log('🔄 Login screen closed, forcing another auth refresh...');
-      await refreshAuth?.();
-    }, 500);
+      console.log('🔄 Second refresh after delay...');
+      try {
+        await refreshAuth?.();
+        console.log('✅ Second refreshAuth completed');
+        
+        // Another event emission to ensure all components are updated
+        authEventEmitter.emit();
+      } catch (error) {
+        console.error('❌ Second refreshAuth error:', error);
+      }
+      
+      // Check final auth state
+      setTimeout(() => {
+        console.log('🔍 Final auth state check in profile:', { isAuthenticated, user: user?.email });
+      }, 200);
+    }, 700);
   };
 
   const handleRegisterSuccess = () => {
@@ -224,9 +238,12 @@ export default function ProfileScreen() {
 
   // Handle follow list modal
   const handleShowFollowers = () => {
+    console.log('🔍 Show followers clicked for user:', user?.id);
+    console.log('📊 Current followers count:', userData.stats.followers);
     setFollowModalType('followers');
     setFollowModalTitle(`${userData.stats.followers} Followers`);
     setShowFollowModal(true);
+    console.log('✅ Follow modal state set to show followers');
   };
 
   const handleShowFollowing = () => {
@@ -235,73 +252,39 @@ export default function ProfileScreen() {
     setShowFollowModal(true);
   };
 
-  const handleSave = async () => {
-    if (!editedName.trim()) {
-      Alert.alert('Error', 'Name cannot be empty');
-      return;
-    }
-
+  const handleSave = async (data: ProfileUpdateData): Promise<boolean> => {
     if (!user) {
       Alert.alert('Error', 'User not logged in');
-      return;
+      return false;
     }
 
-    setLoading(true);
     try {
-      const ageNumber = editedAge.trim() ? parseInt(editedAge.trim()) : undefined;
-      
-      if (editedAge.trim() && (isNaN(ageNumber!) || ageNumber! < 1 || ageNumber! > 120)) {
-        Alert.alert('Error', 'Please enter a valid age (1-120)');
-        setLoading(false);
-        return;
-      }
-
-      let avatarUrl = editedAvatar;
-      
-      // If avatar was changed and is a local file, try to upload it
-      if (editedAvatar && editedAvatar !== userData.avatar && editedAvatar.startsWith('file://')) {
-        console.log('📸 Uploading new avatar...');
-        try {
-          const uploadedUrl = await ProfileService.uploadAvatar(user.id, editedAvatar);
-          if (uploadedUrl) {
-            avatarUrl = uploadedUrl;
-            console.log('✅ Avatar uploaded successfully');
-          } else {
-            console.log('⚠️ Avatar upload failed, using local URI');
-          }
-        } catch (error) {
-          console.error('❌ Avatar upload error:', error);
-          console.log('💾 Using local avatar URI as fallback');
-        }
-      }
-
+      // Convert ProfileUpdateData to the expected format
       const updates = {
-        name: editedName.trim(),
-        bio: editedBio.trim(),
-        age: ageNumber,
-        avatar: avatarUrl || undefined,
+        name: data.name,
+        bio: data.bio,
+        age: data.age,
+        avatar: data.avatar === null ? undefined : data.avatar,
       };
 
       const success = await ProfileService.updateProfile(user.id, updates);
       
       if (success) {
+        // Update local state
         setUserData(prev => ({
           ...prev,
-          name: editedName.trim(),
-          bio: editedBio.trim(),
-          age: ageNumber || null,
-          avatar: avatarUrl,
+          name: data.name,
+          bio: data.bio,
+          age: data.age || null,
+          avatar: data.avatar !== undefined ? data.avatar : prev.avatar,
         }));
-        setIsEditing(false);
-        Alert.alert('Success', 'Profile updated successfully!');
-        console.log('📱 Profile updated with avatar:', avatarUrl ? 'Has avatar' : 'No avatar');
+        return true;
       } else {
-        Alert.alert('Error', 'Failed to update profile');
+        return false;
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to update profile');
-    } finally {
-      setLoading(false);
+      console.error('Error updating profile:', error);
+      return false;
     }
   };
 
@@ -323,84 +306,6 @@ export default function ProfileScreen() {
     );
   }
 
-  if (isEditing) {
-    return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-        <View style={[styles.editHeader, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
-          <TouchableOpacity 
-            style={[styles.backButton, { backgroundColor: colors.background }]}
-            onPress={() => setIsEditing(false)}
-          >
-            <Ionicons name="arrow-back" size={24} color={colors.text} />
-          </TouchableOpacity>
-          <Text style={[styles.editTitle, { color: colors.text }]}>Edit Profile</Text>
-          <TouchableOpacity 
-            style={[styles.saveButton, { backgroundColor: colors.primary }]}
-            onPress={handleSave}
-            disabled={loading}
-          >
-            <Text style={[styles.saveButtonText, { color: colors.white }]}>
-              {loading ? 'Saving...' : 'Save'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <ScrollView style={[styles.editScrollView, { backgroundColor: colors.background }]} contentContainerStyle={styles.editContent}>
-          <View style={styles.editAvatarContainer}>
-            <ProfileImagePicker
-              value={editedAvatar}
-              onChange={setEditedAvatar}
-              size={120}
-            />
-            <Text style={[styles.editAvatarText, { color: colors.textSecondary }]}>Tap to change photo</Text>
-          </View>
-
-          <View style={styles.editForm}>
-            <View style={styles.inputGroup}>
-              <Text style={[styles.inputLabel, { color: colors.text }]}>Name *</Text>
-              <TextInput
-                style={[styles.input, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
-                value={editedName}
-                onChangeText={setEditedName}
-                placeholder="Enter your name"
-                placeholderTextColor={colors.textSecondary}
-                autoCapitalize="words"
-                returnKeyType="next"
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={[styles.inputLabel, { color: colors.text }]}>Age</Text>
-              <TextInput
-                style={[styles.input, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
-                value={editedAge}
-                onChangeText={setEditedAge}
-                placeholder="Enter your age"
-                placeholderTextColor={colors.textSecondary}
-                keyboardType="numeric"
-                returnKeyType="next"
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={[styles.inputLabel, { color: colors.text }]}>Bio</Text>
-              <TextInput
-                style={[styles.input, styles.bioInput, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
-                value={editedBio}
-                onChangeText={setEditedBio}
-                placeholder="Write something about yourself..."
-                placeholderTextColor={colors.textSecondary}
-                multiline
-                numberOfLines={6}
-                textAlignVertical="top"
-              />
-            </View>
-          </View>
-        </ScrollView>
-      </SafeAreaView>
-    );
-  }
-
   const handleLogout = async () => {
     try {
       await signOut();
@@ -409,66 +314,6 @@ export default function ProfileScreen() {
       setShowLoginScreen(true);
     } catch (error) {
       Alert.alert('Error', 'Failed to logout');
-    }
-  };
-
-  const handleAvatarSave = async (newAvatar: string | null) => {
-    if (!user) return;
-    
-    try {
-      let avatarUrl = newAvatar;
-      
-      // If newAvatar is a local URI, upload it to Supabase storage first
-      if (newAvatar && newAvatar.startsWith('file://')) {
-        try {
-          // Create FormData for the file upload
-          const response = await fetch(newAvatar);
-          const blob = await response.blob();
-          
-          avatarUrl = await ProfileService.uploadAvatar(user.id, blob);
-          
-          // If storage upload fails, fall back to base64 encoding
-          if (!avatarUrl) {
-            console.log('Storage upload failed, using base64 fallback');
-            const reader = new FileReader();
-            const base64Promise = new Promise<string>((resolve, reject) => {
-              reader.onload = () => resolve(reader.result as string);
-              reader.onerror = reject;
-            });
-            reader.readAsDataURL(blob);
-            avatarUrl = await base64Promise;
-          }
-        } catch (uploadError) {
-          console.error('Error processing image:', uploadError);
-          Alert.alert('Error', 'Failed to process profile picture');
-          return;
-        }
-      }
-      
-      const success = await ProfileService.updateProfile(user.id, {
-        avatar: avatarUrl || undefined,
-      });
-      
-      if (!success) {
-        setUserData(prev => ({
-          ...prev,
-          avatar: userData.avatar
-        }));
-        Alert.alert('Error', 'Failed to update profile picture');
-      } else {
-        setUserData(prev => ({
-          ...prev,
-          avatar: avatarUrl
-        }));
-        Alert.alert('Success', 'Profile picture updated successfully');
-      }
-    } catch (error) {
-      console.error('Error saving avatar:', error);
-      setUserData(prev => ({
-        ...prev,
-        avatar: userData.avatar
-      }));
-      Alert.alert('Error', 'Failed to update profile picture');
     }
   };
 
@@ -527,10 +372,10 @@ export default function ProfileScreen() {
 
         <TouchableOpacity 
           style={[styles.editButton, { backgroundColor: colors.surface }]}
-          onPress={() => setIsEditing(!isEditing)}
+          onPress={() => setIsEditing(true)}
         >
           <Ionicons 
-            name={isEditing ? "close" : "settings"} 
+            name="settings" 
             size={24} 
             color={colors.primary} 
           />
@@ -549,33 +394,22 @@ export default function ProfileScreen() {
 
         <View style={styles.avatarContainer}>
           <ProfileImagePicker
-            value={isEditing ? editedAvatar : userData.avatar}
+            value={userData.avatar}
             onChange={(newAvatar) => {
-              if (isEditing) {
-                setEditedAvatar(newAvatar);
-              } else {
-                setUserData(prev => ({
-                  ...prev,
-                  avatar: newAvatar
-                }));
-                if (user && newAvatar !== userData.avatar) {
-                  handleAvatarSave(newAvatar);
-                }
-              }
+              setUserData(prev => ({
+                ...prev,
+                avatar: newAvatar
+              }));
             }}
             size={100}
           />
         </View>
 
-        {!isEditing && (
-          <>
-            <Text style={[styles.name, { color: colors.text }]}>{userData.name}</Text>
-            {userData.age && (
-              <Text style={[styles.age, { color: colors.textSecondary }]}>{userData.age} years old</Text>
-            )}
-            <Text style={[styles.bio, { color: colors.textSecondary }]}>{userData.bio || 'No bio yet'}</Text>
-          </>
+        <Text style={[styles.name, { color: colors.text }]}>{userData.name}</Text>
+        {userData.age && (
+          <Text style={[styles.age, { color: colors.textSecondary }]}>{userData.age} years old</Text>
         )}
+        <Text style={[styles.bio, { color: colors.textSecondary }]}>{userData.bio || 'No bio yet'}</Text>
         
         <View style={styles.followContainer}>
           <TouchableOpacity style={styles.followItem} onPress={handleShowFollowers}>
@@ -634,6 +468,19 @@ export default function ProfileScreen() {
         userId={user?.id || ''}
         type={followModalType}
         title={followModalTitle}
+      />
+
+      {/* Edit Profile Modal */}
+      <EditProfileModal
+        visible={isEditing}
+        onClose={() => setIsEditing(false)}
+        onSave={handleSave}
+        currentData={{
+          name: userData.name,
+          bio: userData.bio,
+          age: userData.age,
+          avatar: userData.avatar,
+        }}
       />
     </SafeAreaView>
   );

@@ -1,17 +1,20 @@
 import ActivityItem from '@/components/ActivityItem';
+import ActivitySummary from '@/components/ActivitySummary';
 import { FloatingActionButton } from '@/components/FloatingActionButton';
 import NotificationModal from '@/components/NotificationModal';
 import SearchScreen from '@/components/SearchScreen';
+import WelcomeScreen from '@/components/WelcomeScreen';
 import { Theme } from '@/constants/Theme';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useNotifications } from '@/hooks/useNotifications';
 import { Activity, activityService } from '@/lib/activityService';
+import { authEventEmitter } from '@/lib/authEvents';
 import { ProfileService } from '@/lib/profileService';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useRef, useState } from 'react';
-import { FlatList, Image, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { FlatList, Image, Modal, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function HomeScreen() {
@@ -98,6 +101,53 @@ export default function HomeScreen() {
     }, [initialized, isAuthenticated, user, loadActivities])
   );
 
+  // Also reload when user changes (for account switching)
+  useEffect(() => {
+    console.log('👤 User state changed in index.tsx:', {
+      userId: user?.id,
+      email: user?.email,
+      isAuthenticated,
+      initialized
+    });
+    
+    if (initialized && isAuthenticated && user) {
+      console.log('🔄 User authenticated - reloading activities and profile...');
+      loadActivities();
+    } else if (initialized && !isAuthenticated) {
+      // Clear local state when logged out
+      console.log('🗑️  User not authenticated - clearing local state');
+      setActivities([]);
+      setUserName('');
+      setUserAvatar(null);
+      setTotalStats({
+        totalDistance: 0,
+        totalDuration: 0,
+        totalCalories: 0,
+        totalActivities: 0,
+      });
+    }
+  }, [user?.id, user?.email, initialized, isAuthenticated, loadActivities]);
+
+  // Listen for auth events from other components
+  useEffect(() => {
+    const handleAuthEvent = () => {
+      console.log('📢 Auth event received in index.tsx - checking state...');
+      setTimeout(() => {
+        console.log('🔍 Current auth state after event:', { isAuthenticated, user: user?.email });
+        if (isAuthenticated && user) {
+          console.log('🔄 Auth event: Loading activities...');
+          loadActivities();
+        }
+      }, 200);
+    };
+
+    authEventEmitter.addListener(handleAuthEvent);
+    
+    return () => {
+      authEventEmitter.removeListener(handleAuthEvent);
+    };
+  }, [isAuthenticated, user, loadActivities]);
+
   if (!initialized || loading) {
     console.log('🔄 Showing loading state:', { initialized, loading });
     return (
@@ -114,16 +164,13 @@ export default function HomeScreen() {
   }
 
   if (!isAuthenticated) {
-    console.log('❌ Showing not authenticated state');
+    console.log('❌ Showing welcome screen for unauthenticated user');
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={styles.emptyState}>
-          <Ionicons name="person-outline" size={48} color={colors.primary} />
-          <Text style={[styles.emptyTitle, { color: colors.text }]}>Welcome to Velora</Text>
-          <Text style={[styles.emptyDescription, { color: colors.textSecondary }]}>
-            Please sign in to view your activities
-          </Text>
-        </View>
+        <WelcomeScreen 
+          onSignIn={() => router.push('/profile')} // Navigate to profile tab where login is handled
+          onSignUp={() => router.push('/profile')} // Navigate to profile tab where register is handled
+        />
       </SafeAreaView>
     );
   }
@@ -138,11 +185,20 @@ export default function HomeScreen() {
     router.push('/track');
   };
 
+  const handleViewAllActivities = () => {
+    console.log('📱 Viewing all activities...');
+    router.push('/explore'); // Navigate to explore tab
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.navbar, { borderBottomColor: colors.border, backgroundColor: colors.white }]}>
-        <View>
+      {/* Header */}
+      <View style={[styles.navbar, { borderBottomColor: colors.border, backgroundColor: colors.surface }]}>
+        <View style={styles.headerLeft}>
           <Text style={[styles.title, { color: colors.text }]}>Home</Text>
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+            Welcome back, {userName}
+          </Text>
         </View>
         
         <View style={styles.headerActions}>
@@ -169,87 +225,28 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      <FlatList
-        data={activities}
-        renderItem={({ item }) => (
-          <ActivityItem 
-            activity={item} 
-            onPress={() => handleActivityPress(item)} 
+      {/* Main Content */}
+      <ScrollView 
+        style={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={isLoading}
+            onRefresh={loadActivities}
+            tintColor={colors.primary}
           />
-        )}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
-        refreshing={isLoading}
-        onRefresh={loadActivities}
-        ListHeaderComponent={() => (
-          <View>
-            {/* User Header */}
-            <View style={[styles.userHeader, { backgroundColor: colors.white }]}>
-              <View style={styles.userInfo}>
-                {userAvatar ? (
-                  <Image source={{ uri: userAvatar }} style={styles.profileImage} />
-                ) : (
-                  <View style={[styles.profileImagePlaceholder, { backgroundColor: colors.primary }]}>
-                    <Text style={[styles.profileImageText, { color: colors.white }]}>
-                      {userName.charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
-                )}
-                <View style={styles.userDetails}>
-                  <Text style={[styles.welcomeText, { color: colors.textSecondary }]}>Welcome back,</Text>
-                  <Text style={[styles.userNameText, { color: colors.text }]}>{userName}</Text>
-                </View>
-              </View>
-            </View>
+        }
+      >
+        <ActivitySummary
+          activities={activities}
+          totalStats={totalStats}
+          userName={userName}
+          userAvatar={userAvatar}
+          onViewAllActivities={handleViewAllActivities}
+          onStartNewActivity={handleNewActivity}
+        />
+      </ScrollView>
 
-            {/* Stats Section */}
-            <View style={[styles.statsContainer, { backgroundColor: colors.white }]}>
-              <Text style={[styles.statsTitle, { color: colors.text }]}>Your Stats</Text>
-              <View style={styles.statsGrid}>
-                <View style={[styles.statCard, { backgroundColor: colors.background }]}>
-                  <Text style={[styles.statNumber, { color: colors.primary }]}>
-                    {totalStats.totalDistance.toFixed(1)}
-                  </Text>
-                  <Text style={[styles.statLabel, { color: colors.textSecondary }]}>km</Text>
-                </View>
-                <View style={[styles.statCard, { backgroundColor: colors.background }]}>
-                  <Text style={[styles.statNumber, { color: colors.primary }]}>
-                    {Math.floor(totalStats.totalDuration / 60)}
-                  </Text>
-                  <Text style={[styles.statLabel, { color: colors.textSecondary }]}>hours</Text>
-                </View>
-                <View style={[styles.statCard, { backgroundColor: colors.background }]}>
-                  <Text style={[styles.statNumber, { color: colors.primary }]}>
-                    {totalStats.totalCalories}
-                  </Text>
-                  <Text style={[styles.statLabel, { color: colors.textSecondary }]}>calories</Text>
-                </View>
-                <View style={[styles.statCard, { backgroundColor: colors.background }]}>
-                  <Text style={[styles.statNumber, { color: colors.primary }]}>
-                    {totalStats.totalActivities}
-                  </Text>
-                  <Text style={[styles.statLabel, { color: colors.textSecondary }]}>activities</Text>
-                </View>
-              </View>
-            </View>
-
-            {/* Recent Activities Header */}
-            <View style={[styles.sectionHeader, { backgroundColor: colors.white }]}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Recent Activities</Text>
-            </View>
-          </View>
-        )}
-        ListEmptyComponent={() => (
-          <View style={styles.emptyState}>
-            <Ionicons name="fitness-outline" size={48} color={colors.primary} />
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>No Activities Yet</Text>
-            <Text style={[styles.emptyDescription, { color: colors.textSecondary }]}>
-              Start tracking your fitness journey!
-            </Text>
-          </View>
-        )}
-      />
-
+      {/* Floating Action Button for Quick Activity */}
       <FloatingActionButton onPress={handleNewActivity} />
 
       {/* Search Modal */}
@@ -427,5 +424,15 @@ const styles = StyleSheet.create({
     color: Theme.colors.textSecondary,
     marginTop: Theme.spacing.sm,
     textAlign: 'center',
+  },
+  headerLeft: {
+    flex: 1,
+  },
+  subtitle: {
+    fontSize: 14,
+    marginTop: 2,
+  },
+  scrollContent: {
+    flex: 1,
   },
 });

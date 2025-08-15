@@ -12,7 +12,7 @@ export const createProfile = async (profileData: any) => {
   try {
     // First, try with the regular client
     const { data, error } = await supabase
-      .from('profiles')
+      .from('users')
       .insert([profileData])
       .select();
 

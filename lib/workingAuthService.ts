@@ -22,7 +22,7 @@ class WorkingAuthService {
       console.log('WorkingAuth: Normal login failed, trying force methods...');
 
       const { data: profile, error: profileError } = await supabase
-        .from('profiles')
+        .from('users')
         .select('*')
         .eq('email', email)
         .single();
@@ -49,7 +49,7 @@ class WorkingAuthService {
 
       if (!signupError && signupData.user) {
         await supabase
-          .from('profiles')
+          .from('users')
           .upsert({
             id: signupData.user.id,
             email: email,
@@ -101,7 +101,7 @@ class WorkingAuthService {
         const userId = adminData.user.id;
         
         const { error: profileError } = await supabase
-          .from('profiles')
+          .from('users')
           .insert({
             id: userId,
             name: name,
@@ -121,7 +121,7 @@ class WorkingAuthService {
 
       if (authData.user) {
         const { error: profileError } = await supabase
-          .from('profiles')
+          .from('users')
           .insert({
             id: authData.user.id,
             name: name,
@@ -155,7 +155,7 @@ class WorkingAuthService {
       const userId = crypto.randomUUID();
       
       const { error: profileError } = await supabase
-        .from('profiles')
+        .from('users')
         .insert({
           id: userId,
           name: name,

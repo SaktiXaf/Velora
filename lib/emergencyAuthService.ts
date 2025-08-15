@@ -39,7 +39,7 @@ export const EmergencyAuth = {
       };
 
       const { data: profile, error: profileError } = await supabase
-        .from('profiles')
+        .from('users')
         .insert([profileData])
         .select()
         .single();
