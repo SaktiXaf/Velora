@@ -40,6 +40,7 @@ export class AvatarUploadService {
       console.log('📸 File info:', { size: fileInfo.size, exists: fileInfo.exists });
 
       // Try to upload to Supabase storage first
+      console.log('📤 Attempting Supabase upload...');
       const supabaseResult = await this.uploadToSupabase(userId, imageUri);
       if (supabaseResult.success) {
         console.log('✅ Avatar uploaded to Supabase successfully');
@@ -49,11 +50,14 @@ export class AvatarUploadService {
       }
 
       console.log('⚠️ Supabase upload failed, using local storage fallback');
+      console.log('⚠️ Supabase error:', supabaseResult.error);
       
       // Fallback: Store image locally
       const localResult = await this.storeAvatarLocally(userId, imageUri);
       if (localResult.success) {
         console.log('✅ Avatar stored locally successfully');
+        // Also cache the local URL
+        await this.cacheAvatarUrl(userId, localResult.url!);
         return localResult;
       }
 
@@ -67,9 +71,11 @@ export class AvatarUploadService {
       
       // Try local storage as final fallback
       try {
+        console.log('🔄 Attempting emergency local storage fallback...');
         const localResult = await this.storeAvatarLocally(userId, imageUri);
         if (localResult.success) {
           console.log('✅ Avatar stored locally as emergency fallback');
+          await this.cacheAvatarUrl(userId, localResult.url!);
           return localResult;
         }
       } catch (localError) {
@@ -88,15 +94,30 @@ export class AvatarUploadService {
    */
   private static async uploadToSupabase(userId: string, imageUri: string): Promise<ImageUploadResult> {
     try {
+      console.log('📤 Starting Supabase upload for user:', userId);
+      
       // Read file as blob
       const response = await fetch(imageUri);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch image: ${response.status}`);
+      }
+      
       const blob = await response.blob();
+      console.log('📤 File blob created, size:', blob.size, 'type:', blob.type);
       
       // Create unique filename
       const fileExt = imageUri.split('.').pop() || 'jpg';
       const fileName = `${userId}_${Date.now()}.${fileExt}`;
       
-      console.log('📤 Uploading to Supabase storage:', fileName);
+      console.log('📤 Uploading to Supabase storage bucket "avatars":', fileName);
+
+      // Check if avatars bucket exists
+      const { data: buckets, error: bucketError } = await supabase.storage.listBuckets();
+      console.log('📤 Available buckets:', buckets?.map(b => b.name) || 'none');
+      
+      if (bucketError) {
+        console.error('❌ Error listing buckets:', bucketError);
+      }
 
       // Upload to Supabase storage
       const { data, error } = await supabase.storage
@@ -108,12 +129,17 @@ export class AvatarUploadService {
         });
 
       if (error) {
-        console.error('❌ Supabase storage error:', error);
+        console.error('❌ Supabase storage upload error:', {
+          message: error.message,
+          name: error.name
+        });
         return {
           success: false,
-          error: error.message
+          error: `Storage upload failed: ${error.message}`
         };
       }
+
+      console.log('📤 Upload successful, data:', data);
 
       // Get public URL
       const { data: urlData } = supabase.storage
@@ -128,7 +154,7 @@ export class AvatarUploadService {
       };
 
     } catch (error) {
-      console.error('❌ Supabase upload error:', error);
+      console.error('❌ Supabase upload exception:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Supabase upload failed'

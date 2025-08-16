@@ -62,7 +62,6 @@ export default function ProfileScreen() {
   const [userData, setUserData] = useState(initialUser);
   const [loading, setLoading] = useState(false);
   
-  // Follow list modal states
   const [showFollowModal, setShowFollowModal] = useState(false);
   const [followModalType, setFollowModalType] = useState<'followers' | 'following'>('followers');
   const [followModalTitle, setFollowModalTitle] = useState('');
@@ -123,18 +122,34 @@ export default function ProfileScreen() {
   const loadUserProfile = async (userId: string) => {
     setLoading(true);
     try {
-      console.log('🔄 Loading user profile for:', userId);
+      console.log('🔄 Loading user profile for userId:', userId);
+      console.log('👤 Current user object:', { id: user?.id, email: user?.email });
+      
+      // First ensure profile exists in database
+      if (user?.email) {
+        console.log('🔍 Ensuring profile exists...');
+        const profileCreated = await ProfileService.ensureProfileExists(userId, user.email, undefined);
+        console.log('✅ Profile ensure result:', profileCreated);
+      } else {
+        console.warn('⚠️ No user email available for profile creation');
+      }
+      
+      // Use the new persistence-priority loading method
       const [profile, activityStats] = await Promise.all([
-        ProfileService.getProfile(userId),
+        ProfileService.loadProfileWithPersistence(userId),
         activityService.getTotalStats(userId)
       ]);
       
       if (profile) {
-        console.log('👤 Profile loaded, preserving follow stats:', {
+        console.log('👤 Profile loaded successfully:', {
+          name: profile.name,
+          bio: profile.bio || 'No bio',
+          age: profile.age || 'No age',
+          hasAvatar: !!profile.avatar,
+          avatarUrl: profile.avatar,
+          avatarType: typeof profile.avatar,
           currentFollowers: userData.stats.followers,
           currentFollowing: userData.stats.following,
-          avatarFound: !!profile.avatar,
-          avatarUrl: profile.avatar
         });
         
         setUserData(prev => ({
@@ -152,16 +167,17 @@ export default function ProfileScreen() {
           },
         }));
       } else {
+        console.log('⚠️ No profile found, using defaults');
         // Set default values if no profile found
         setUserData(prev => ({
-          name: 'User',
+          name: user?.email?.split('@')[0] || 'User',
           bio: '',
           avatar: null,
           age: null,
           stats: {
-            totalDistance: 0,
-            totalTime: 0,
-            totalActivities: 0,
+            totalDistance: activityStats.totalDistance,
+            totalTime: activityStats.totalDuration,
+            totalActivities: activityStats.totalActivities,
             // Keep current follow stats from useFollowStats hook
             followers: prev.stats.followers,
             following: prev.stats.following,
@@ -195,6 +211,24 @@ export default function ProfileScreen() {
     console.log('🔧 Current auth state before refresh:', { isAuthenticated, user: user?.email });
     
     setShowLoginScreen(false);
+    
+    // Ensure profile exists in database and cache
+    if (userData.id && userData.email) {
+      console.log('🔍 Ensuring profile exists for user:', userData.id);
+      await ProfileService.ensureProfileExists(userData.id, userData.email, userData.name);
+      
+      // Load profile with persistence priority
+      console.log('📱 Loading profile with persistence for logged in user...');
+      const savedProfile = await ProfileService.loadProfileWithPersistence(userData.id);
+      if (savedProfile) {
+        console.log('✅ Restored profile data after login:', {
+          name: savedProfile.name,
+          bio: savedProfile.bio || 'No bio',
+          age: savedProfile.age || 'No age',
+          hasAvatar: !!savedProfile.avatar
+        });
+      }
+    }
     
     // Force refresh auth state to recognize mock session
     console.log('🔄 Calling refreshAuth to update authentication state...');
@@ -232,8 +266,10 @@ export default function ProfileScreen() {
   };
 
   const handleRegisterSuccess = () => {
-    console.log('Registration successful');
+    console.log('✅ Registration successful');
     setShowRegisterScreen(false);
+    
+    // Profile will be created when auth state changes and loadUserProfile is called
   };
 
   // Handle follow list modal
@@ -259,6 +295,9 @@ export default function ProfileScreen() {
     }
 
     try {
+      console.log('💾 Saving profile data:', data);
+      console.log('👤 User info:', { id: user.id, email: user.email });
+      
       // Convert ProfileUpdateData to the expected format
       const updates = {
         name: data.name,
@@ -267,10 +306,13 @@ export default function ProfileScreen() {
         avatar: data.avatar === null ? undefined : data.avatar,
       };
 
+      console.log('📝 Sending updates to ProfileService:', updates);
+
+      // Always save - ProfileService will handle database vs cache logic
       const success = await ProfileService.updateProfile(user.id, updates);
       
       if (success) {
-        // Update local state
+        // Update local state immediately
         setUserData(prev => ({
           ...prev,
           name: data.name,
@@ -278,12 +320,24 @@ export default function ProfileScreen() {
           age: data.age || null,
           avatar: data.avatar !== undefined ? data.avatar : prev.avatar,
         }));
+        
+        console.log('✅ Profile updated successfully - data is now persistent');
+        
+        // Show success message
+        Alert.alert(
+          'Profil Tersimpan!',
+          'Profil Anda telah disimpan dan akan tetap ada saat login kembali.',
+          [{ text: 'OK' }]
+        );
+        
         return true;
       } else {
+        Alert.alert('Error', 'Gagal menyimpan profil. Silakan coba lagi.');
         return false;
       }
     } catch (error) {
       console.error('Error updating profile:', error);
+      Alert.alert('Error', 'Terjadi kesalahan saat menyimpan profil.');
       return false;
     }
   };
@@ -308,12 +362,20 @@ export default function ProfileScreen() {
 
   const handleLogout = async () => {
     try {
+      console.log('🔐 Starting logout process...');
+      
+      // Clear profile cache first to ensure clean logout
+      await ProfileService.clearAllProfileCacheEnhanced();
+      
+      // Then sign out
       await signOut();
       setIsEditing(false);
       setUserData(initialUser);
-      setShowLoginScreen(true);
+      
+      console.log('✅ Logout completed successfully');
     } catch (error) {
-      Alert.alert('Error', 'Failed to logout');
+      console.error('❌ Error during logout:', error);
+      Alert.alert('Error', 'Failed to logout completely, but you have been signed out.');
     }
   };
 

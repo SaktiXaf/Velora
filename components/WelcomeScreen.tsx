@@ -1,7 +1,7 @@
 import { useTheme } from '@/contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface WelcomeScreenProps {
   onSignIn: () => void;
@@ -11,31 +11,14 @@ interface WelcomeScreenProps {
 export default function WelcomeScreen({ onSignIn, onSignUp }: WelcomeScreenProps) {
   const { colors } = useTheme();
 
-  const features = [
-    {
-      icon: 'location-outline',
-      title: 'Track Your Runs',
-      description: 'Record distance, pace, and route with GPS tracking'
-    },
-    {
-      icon: 'stats-chart-outline',
-      title: 'Monitor Progress',
-      description: 'View detailed statistics and track your improvements'
-    },
-    {
-      icon: 'people-outline',
-      title: 'Connect with Others',
-      description: 'Follow friends and share your achievements'
-    },
-    {
-      icon: 'trophy-outline',
-      title: 'Achieve Goals',
-      description: 'Set targets and celebrate your milestones'
-    }
-  ];
-
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <ScrollView 
+      style={[styles.container, { backgroundColor: colors.background }]}
+      contentContainerStyle={styles.contentContainer}
+      showsVerticalScrollIndicator={false}
+      bounces={true}
+      alwaysBounceVertical={true}
+    >
       {/* Hero Section */}
       <View style={styles.heroSection}>
         <View style={[styles.logoContainer, { backgroundColor: colors.primary }]}>
@@ -58,19 +41,59 @@ export default function WelcomeScreen({ onSignIn, onSignUp }: WelcomeScreenProps
         </Text>
         
         <View style={styles.featuresGrid}>
-          {features.map((feature, index) => (
-            <View key={index} style={[styles.featureCard, { backgroundColor: colors.surface }]}>
+          {/* Row 1 */}
+          <View style={styles.featuresRow}>
+            <View style={[styles.featureCard, { backgroundColor: colors.surface }]}>
               <View style={[styles.featureIcon, { backgroundColor: colors.primary + '20' }]}>
-                <Ionicons name={feature.icon as any} size={24} color={colors.primary} />
+                <Ionicons name="location-outline" size={24} color={colors.primary} />
               </View>
               <Text style={[styles.featureTitle, { color: colors.text }]}>
-                {feature.title}
+                Track Your Runs
               </Text>
               <Text style={[styles.featureDescription, { color: colors.textSecondary }]}>
-                {feature.description}
+                Record distance, pace, and route with GPS tracking
               </Text>
             </View>
-          ))}
+            
+            <View style={[styles.featureCard, { backgroundColor: colors.surface }]}>
+              <View style={[styles.featureIcon, { backgroundColor: colors.primary + '20' }]}>
+                <Ionicons name="stats-chart-outline" size={24} color={colors.primary} />
+              </View>
+              <Text style={[styles.featureTitle, { color: colors.text }]}>
+                Monitor Progress
+              </Text>
+              <Text style={[styles.featureDescription, { color: colors.textSecondary }]}>
+                View detailed statistics and track your improvements
+              </Text>
+            </View>
+          </View>
+          
+          {/* Row 2 */}
+          <View style={styles.featuresRow}>
+            <View style={[styles.featureCard, { backgroundColor: colors.surface }]}>
+              <View style={[styles.featureIcon, { backgroundColor: colors.primary + '20' }]}>
+                <Ionicons name="people-outline" size={24} color={colors.primary} />
+              </View>
+              <Text style={[styles.featureTitle, { color: colors.text }]}>
+                Connect with Others
+              </Text>
+              <Text style={[styles.featureDescription, { color: colors.textSecondary }]}>
+                Follow friends and share your achievements
+              </Text>
+            </View>
+            
+            <View style={[styles.featureCard, { backgroundColor: colors.surface }]}>
+              <View style={[styles.featureIcon, { backgroundColor: colors.primary + '20' }]}>
+                <Ionicons name="trophy-outline" size={24} color={colors.primary} />
+              </View>
+              <Text style={[styles.featureTitle, { color: colors.text }]}>
+                Achieve Goals
+              </Text>
+              <Text style={[styles.featureDescription, { color: colors.textSecondary }]}>
+                Set targets and celebrate your milestones
+              </Text>
+            </View>
+          </View>
         </View>
       </View>
 
@@ -118,19 +141,23 @@ export default function WelcomeScreen({ onSignIn, onSignUp }: WelcomeScreenProps
           </View>
         </View>
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
+  },
+  contentContainer: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 30,
   },
   heroSection: {
     alignItems: 'center',
-    paddingVertical: 40,
-    paddingHorizontal: 20,
+    paddingVertical: 24,
+    paddingHorizontal: 0,
   },
   logoContainer: {
     width: 100,
@@ -158,7 +185,9 @@ const styles = StyleSheet.create({
     maxWidth: 300,
   },
   featuresSection: {
-    marginVertical: 32,
+    marginTop: 16,
+    marginBottom: 20,
+    paddingHorizontal: 0,
   },
   featuresTitle: {
     fontSize: 20,
@@ -167,17 +196,28 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   featuresGrid: {
+    gap: 12,
+  },
+  featuresRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 16,
     justifyContent: 'space-between',
+    marginBottom: 12,
   },
   featureCard: {
-    width: '48%',
-    padding: 20,
+    flex: 1,
+    marginHorizontal: 4,
+    padding: 14,
     borderRadius: 12,
     alignItems: 'center',
-    minHeight: 140,
+    minHeight: 120,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   featureIcon: {
     width: 48,
@@ -190,17 +230,20 @@ const styles = StyleSheet.create({
   featureTitle: {
     fontSize: 14,
     fontWeight: '600',
-    marginBottom: 8,
+    marginBottom: 6,
     textAlign: 'center',
+    lineHeight: 18,
   },
   featureDescription: {
-    fontSize: 12,
+    fontSize: 11,
     textAlign: 'center',
-    lineHeight: 16,
+    lineHeight: 14,
+    paddingHorizontal: 4,
   },
   actionsSection: {
-    marginVertical: 20,
-    gap: 16,
+    marginTop: 16,
+    marginBottom: 20,
+    gap: 12,
   },
   primaryButton: {
     paddingVertical: 16,
@@ -231,7 +274,8 @@ const styles = StyleSheet.create({
   statsPreview: {
     padding: 20,
     borderRadius: 12,
-    marginTop: 20,
+    marginTop: 16,
+    marginBottom: 0,
   },
   statsTitle: {
     fontSize: 16,

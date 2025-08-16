@@ -1,8 +1,8 @@
-import UserGreeting from './UserGreeting';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import UserGreeting from './UserGreeting';
 
 interface Activity {
   id: string;
@@ -168,17 +168,18 @@ export default function ActivitySummary({
           <View style={styles.emptyState}>
             <Ionicons name="fitness-outline" size={48} color={colors.textSecondary} />
             <Text style={[styles.emptyTitle, { color: colors.text }]}>
-              No Activities Yet
+              Welcome to Your Fitness Journey!
             </Text>
             <Text style={[styles.emptyDescription, { color: colors.textSecondary }]}>
-              Start your first workout to see it here!
+              Ready to start tracking your activities? Tap below to record your first workout and see your progress here.
             </Text>
             <TouchableOpacity 
               style={[styles.startButton, { backgroundColor: colors.primary }]}
               onPress={onStartNewActivity}
             >
+              <Ionicons name="add-circle-outline" size={20} color={colors.white} style={{ marginRight: 8 }} />
               <Text style={[styles.startButtonText, { color: colors.white }]}>
-                Start Now
+                Start Your First Workout
               </Text>
             </TouchableOpacity>
           </View>
@@ -347,6 +348,9 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   startButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,

@@ -20,6 +20,7 @@ export default function UserGreeting({ userName, userAvatar }: UserGreetingProps
       const time = now.toLocaleTimeString('en-US', { 
         hour: 'numeric', 
         minute: '2-digit',
+        second: '2-digit',
         hour12: true 
       });
 
@@ -37,7 +38,7 @@ export default function UserGreeting({ userName, userAvatar }: UserGreetingProps
     };
 
     updateGreeting();
-    const interval = setInterval(updateGreeting, 60000); // Update every minute
+    const interval = setInterval(updateGreeting, 1000); // Update every second for real-time
 
     return () => clearInterval(interval);
   }, []);

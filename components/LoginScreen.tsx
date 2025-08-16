@@ -65,7 +65,7 @@ export default function LoginScreen({ onBack, onSuccess }: LoginScreenProps) {
             size="small"
           />
           <Ionicons name="person-circle-outline" size={120} color={colors.primary} />
-          <Text style={[styles.title, { color: colors.text }]}>Masuk ke Strava</Text>
+          <Text style={[styles.title, { color: colors.text }]}>Masuk ke Velora</Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Silakan masuk dengan akun Anda</Text>
         </View>
 

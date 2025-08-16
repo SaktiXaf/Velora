@@ -13,6 +13,70 @@ export const clearAuthChangeCallback = () => {
 };
 
 export const AuthService = {
+  // Get current authenticated user with fallbacks
+  async getCurrentUser(): Promise<{ id: string; email?: string; isAuthenticated: boolean } | null> {
+    try {
+      console.log('🔍 Getting current authenticated user...');
+      
+      // Method 1: Try getUser()
+      const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser();
+      
+      if (currentUser?.id && currentUser?.email) {
+        console.log('✅ User found via getUser():', currentUser.id);
+        return {
+          id: currentUser.id,
+          email: currentUser.email,
+          isAuthenticated: true
+        };
+      }
+      
+      console.log('⚠️ getUser() failed, trying getSession()...');
+      console.log('🔍 getUser error:', userError);
+      
+      // Method 2: Try getSession()
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (session?.user?.id && session?.user?.email) {
+        console.log('✅ User found via getSession():', session.user.id);
+        return {
+          id: session.user.id,
+          email: session.user.email,
+          isAuthenticated: true
+        };
+      }
+      
+      console.log('❌ No authenticated user found');
+      console.log('🔍 getSession error:', sessionError);
+      
+      return null;
+      
+    } catch (error) {
+      console.error('❌ Error getting current user:', error);
+      return null;
+    }
+  },
+
+  // Check if user ID is valid and matches auth
+  async validateUserId(providedUserId: string): Promise<string | null> {
+    const authUser = await this.getCurrentUser();
+    
+    if (!authUser) {
+      console.log('❌ No authenticated user for validation');
+      return null;
+    }
+    
+    if (authUser.id === providedUserId) {
+      console.log('✅ User ID validation passed');
+      return authUser.id;
+    }
+    
+    console.log('⚠️ User ID mismatch - using authenticated ID');
+    console.log('🔍 Provided:', providedUserId);
+    console.log('🔍 Authenticated:', authUser.id);
+    
+    return authUser.id;
+  },
+
   async registerUserWithProfile(userData: {
     name: string;
     email: string;
@@ -197,9 +261,11 @@ export const AuthService = {
             // Trigger callback if available
             console.log('🔔 Triggering auth callback for mock user:', mockUser.email);
             if (authChangeCallback) {
+              console.log('✅ Auth callback found, calling it now...');
               authChangeCallback(mockUser);
+              console.log('✅ Auth callback executed');
             } else {
-              console.warn('⚠️ No auth callback registered!');
+              console.error('❌ NO AUTH CALLBACK REGISTERED! This is the problem!');
             }
             
             // Additional delay to ensure state propagation

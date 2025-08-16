@@ -1,5 +1,5 @@
-import { clearAuthChangeCallback, setAuthChangeCallback } from '@/lib/authService';
 import { authEventEmitter } from '@/lib/authEvents';
+import { clearAuthChangeCallback, setAuthChangeCallback } from '@/lib/authService';
 import { ProfileService } from '@/lib/profileService';
 import { sessionStorage } from '@/lib/sessionStorage';
 import { supabase } from '@/lib/supabase';
@@ -11,13 +11,26 @@ export function useAuth() {
   const [loading, setLoading] = useState(true);
   const [initialized, setInitialized] = useState(false);
 
+  console.log('🔧 useAuth hook render - Current state:', {
+    hasUser: !!user,
+    userEmail: user?.email || 'none',
+    loading,
+    initialized,
+    isAuthenticated: !!user
+  });
+
   // Force refresh authentication state
   const refreshAuth = useCallback(async () => {
     try {
-      console.log('🔄 RefreshAuth called');
+      console.log('🔄 RefreshAuth called - START');
       setLoading(true);
+      
       const localSession = await sessionStorage.getStoredSession();
-      console.log('🔄 RefreshAuth: Local session:', localSession?.email || 'none');
+      console.log('🔄 RefreshAuth: Local session check result:', {
+        found: !!localSession,
+        email: localSession?.email || 'none',
+        userId: localSession?.userId || 'none'
+      });
       
       if (localSession) {
         const mockUser = {
@@ -30,24 +43,32 @@ export function useAuth() {
           created_at: localSession.lastLogin,
           updated_at: localSession.lastLogin
         } as User;
+        
         console.log('✅ RefreshAuth: Setting user:', mockUser.email, 'ID:', mockUser.id);
         setUser(mockUser);
+        console.log('✅ RefreshAuth: User state updated');
+        
         setInitialized(true);
+        console.log('✅ RefreshAuth: Initialized set to true');
         
         // Force sync profile and avatar from server for cross-device consistency
         console.log('📱 Force syncing profile for cross-device login...');
         await ProfileService.forceProfileSync(mockUser.id);
+        console.log('✅ RefreshAuth: Profile sync completed');
       } else {
-        console.log('❌ RefreshAuth: No session, clearing user');
+        console.log('❌ RefreshAuth: No session found, clearing user');
         setUser(null);
         setInitialized(true);
       }
+      
+      console.log('🔄 RefreshAuth - COMPLETE');
     } catch (error) {
       console.error('❌ RefreshAuth error:', error);
       setUser(null);
       setInitialized(true);
     } finally {
       setLoading(false);
+      console.log('🔄 RefreshAuth: Loading set to false');
     }
   }, []);
 
@@ -60,7 +81,12 @@ export function useAuth() {
         console.log('🔄 Initializing auth...');
         setLoading(true);
         const localSession = await sessionStorage.getStoredSession();
-        console.log('📱 Local session found:', localSession?.email || 'none');
+        console.log('📱 Local session check result:', {
+          found: !!localSession,
+          email: localSession?.email || 'none',
+          userId: localSession?.userId || 'none',
+          lastLogin: localSession?.lastLogin || 'none'
+        });
         
         if (localSession && mounted) {
           const mockUser = {
@@ -149,12 +175,17 @@ export function useAuth() {
 
     console.log('🔧 Setting up auth change callback...');
     setAuthChangeCallback(handleMockAuthChange);
+    console.log('✅ Auth callback registered successfully');
+    
+    console.log('🔧 Starting auth initialization...');
     initializeAuth();
 
     return () => {
+      console.log('🧹 useAuth cleanup - unmounting');
       mounted = false;
       subscription?.unsubscribe();
       clearAuthChangeCallback();
+      console.log('✅ Auth callback cleared on cleanup');
     };
   }, []); // Only run once
 
@@ -163,21 +194,18 @@ export function useAuth() {
       setLoading(true);
       console.log('🚪 Signing out user:', user?.email);
       
-      // Clear all user-related data completely
-      await sessionStorage.clearAllUserData();
-      
-      // Clear profile cache
-      await ProfileService.clearAllProfileCache();
+      // Only clear session data, preserve profile data for next login
+      await sessionStorage.clearSession();
       
       // Clear Supabase session
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
       
-      // Force clear user state
+      // Force clear user state but keep profile data cached
       setUser(null);
       setInitialized(true);
       
-      console.log('✅ Complete sign out successful - all user data cleared');
+      console.log('✅ Sign out successful - session cleared, profile data preserved');
     } catch (error) {
       console.error('Sign out failed:', error);
       // Force clear even if there's an error

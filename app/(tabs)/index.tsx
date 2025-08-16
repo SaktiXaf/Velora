@@ -1,4 +1,3 @@
-import ActivityItem from '@/components/ActivityItem';
 import ActivitySummary from '@/components/ActivitySummary';
 import { FloatingActionButton } from '@/components/FloatingActionButton';
 import NotificationModal from '@/components/NotificationModal';
@@ -14,7 +13,7 @@ import { ProfileService } from '@/lib/profileService';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { FlatList, Image, Modal, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Modal, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function HomeScreen() {
@@ -101,7 +100,7 @@ export default function HomeScreen() {
     }, [initialized, isAuthenticated, user, loadActivities])
   );
 
-  // Also reload when user changes (for account switching)
+      // Also reload when user changes (for account switching)
   useEffect(() => {
     console.log('👤 User state changed in index.tsx:', {
       userId: user?.id,
@@ -149,14 +148,14 @@ export default function HomeScreen() {
   }, [isAuthenticated, user, loadActivities]);
 
   if (!initialized || loading) {
-    console.log('🔄 Showing loading state:', { initialized, loading });
+    console.log('🔄 Showing loading state:', { initialized, loading, isAuthenticated, user: user?.email });
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.emptyState}>
           <Ionicons name="refresh" size={48} color={colors.primary} />
           <Text style={[styles.emptyTitle, { color: colors.text }]}>Loading...</Text>
           <Text style={[styles.emptyDescription, { color: colors.textSecondary }]}>
-            Getting your activities ready
+            {!initialized ? 'Initializing your account...' : 'Getting your activities ready...'}
           </Text>
         </View>
       </SafeAreaView>
@@ -164,7 +163,12 @@ export default function HomeScreen() {
   }
 
   if (!isAuthenticated) {
-    console.log('❌ Showing welcome screen for unauthenticated user');
+    console.log('❌ Showing welcome screen - Auth status:', { 
+      isAuthenticated, 
+      initialized, 
+      user: user?.email || 'no user',
+      userId: user?.id || 'no id'
+    });
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <WelcomeScreen 
@@ -174,6 +178,8 @@ export default function HomeScreen() {
       </SafeAreaView>
     );
   }
+
+  console.log('✅ Showing authenticated home screen for user:', user?.email);
 
   const handleActivityPress = (activity: Activity) => {
     console.log('📱 Activity pressed:', activity.id);
@@ -197,7 +203,7 @@ export default function HomeScreen() {
         <View style={styles.headerLeft}>
           <Text style={[styles.title, { color: colors.text }]}>Home</Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            Welcome back, {userName}
+            {userName ? `Welcome back, ${userName}` : 'Your Activity Feed'}
           </Text>
         </View>
         

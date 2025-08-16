@@ -1,5 +1,4 @@
 import { Button } from '@/components/Button';
-import { Colors } from '@/constants/Colors';
 import { Theme } from '@/constants/Theme';
 import { useTheme } from '@/contexts/ThemeContext';
 import { EnhancedRegistrationService } from '@/lib/enhancedRegistrationService';
