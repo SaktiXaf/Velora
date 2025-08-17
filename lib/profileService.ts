@@ -1,15 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AvatarUploadService } from './avatarUploadService';
 import { DatabaseUser, supabase } from './supabase';
+import { UserService, UserProfile } from './userService';
 
 export { DatabaseUser };
 
 const PROFILE_CACHE_PREFIX = 'profile_cache_';
-const AVATAR_CACHE_PREFIX = 'avatar_cache_';
 
 export class ProfileService {
   
-  // Cache profile data locally for cross-device sync
+  // Simple cache profile data
   private static async cacheProfile(userId: string, profile: DatabaseUser): Promise<void> {
     try {
       const cacheKey = `${PROFILE_CACHE_PREFIX}${userId}`;
@@ -27,7 +27,7 @@ export class ProfileService {
       const cached = await AsyncStorage.getItem(cacheKey);
       if (cached) {
         const profile = JSON.parse(cached) as DatabaseUser;
-        console.log('📱 Found cached profile for user:', userId, 'with avatar:', !!profile.avatar);
+        console.log('📱 Found cached profile for user:', userId);
         return profile;
       }
       return null;
@@ -37,165 +37,77 @@ export class ProfileService {
     }
   }
 
-  // Sync avatar URL locally for cross-device consistency
-  private static async syncAvatarURL(userId: string, avatarUrl: string | null): Promise<void> {
-    try {
-      const cacheKey = `${AVATAR_CACHE_PREFIX}${userId}`;
-      
-      // If server has avatar URL, update local cache
-      if (avatarUrl) {
-        await AsyncStorage.setItem(cacheKey, avatarUrl);
-        console.log('📱 Avatar URL synced for user:', userId);
-      } else {
-        // Only clear local avatar if it doesn't exist locally
-        // This prevents server null values from overriding locally uploaded avatars
-        const existingAvatar = await AsyncStorage.getItem(cacheKey);
-        if (!existingAvatar) {
-          console.log('📱 No avatar to clear for user:', userId);
-        } else {
-          console.log('📱 Preserving local avatar (server has null):', userId);
-        }
-      }
-    } catch (error) {
-      console.error('Error syncing avatar URL:', error);
-    }
-  }
-
-  // Get synced avatar URL
-  private static async getSyncedAvatarURL(userId: string): Promise<string | null> {
-    try {
-      const cacheKey = `${AVATAR_CACHE_PREFIX}${userId}`;
-      const avatarUrl = await AsyncStorage.getItem(cacheKey);
-      if (avatarUrl) {
-        console.log('📱 Found synced avatar URL for user:', userId);
-        return avatarUrl;
-      }
-      return null;
-    } catch (error) {
-      console.error('Error getting synced avatar URL:', error);
-      return null;
-    }
-  }
-
   static async getProfile(userId: string): Promise<DatabaseUser | null> {
     try {
       console.log('📱 Getting profile for user:', userId);
       
-      // First try to get from server
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', userId)
-        .single();
+      // First try cache for instant response
+      const cachedProfile = await this.getCachedProfile(userId);
+      
+      // Try to get from database
+      const result = await UserService.getUserProfile(userId);
+      
+      if (result.success && result.user) {
+        // Convert UserProfile to DatabaseUser format
+        const data: DatabaseUser = {
+          id: result.user.id,
+          email: result.user.email,
+          name: result.user.name || result.user.email || '',
+          age: result.user.age || undefined,
+          bio: result.user.bio || undefined,
+          avatar: result.user.profile_picture || undefined,
+          created_at: result.user.created_at || new Date().toISOString(),
+        };
 
-      if (error) {
-        console.error('❌ Error fetching profile from server:', error);
-        
-        if (error.message.includes('Network request failed')) {
-          console.log('🌐 Network error, using cached profile');
-        }
-        
-        // Fallback to cached profile if server fails
-        const cachedProfile = await this.getCachedProfile(userId);
+        // Cache the new data
+        await this.cacheProfile(userId, data);
+        console.log('📱 Profile loaded from database');
+        return data;
+      } else {
+        // Return cached if database fails
         if (cachedProfile) {
-          console.log('📱 Using cached profile as fallback');
-          // Also check for synced avatar
-          const syncedAvatar = await this.getSyncedAvatarURL(userId);
-          if (syncedAvatar && syncedAvatar !== cachedProfile.avatar) {
-            cachedProfile.avatar = syncedAvatar;
-            console.log('📱 Updated cached profile with synced avatar');
-          }
+          console.log('📱 Using cached profile (database failed)');
           return cachedProfile;
         }
+        
+        console.error('❌ Error fetching profile:', result.error);
         return null;
       }
-
-      // If server data exists, cache it and sync avatar
-      if (data) {
-        await this.cacheProfile(userId, data);
-        await this.syncAvatarURL(userId, data.avatar);
-        console.log('📱 Profile synced from server, avatar:', !!data.avatar);
-        return data;
-      }
-
-      // If no server data, check for cached profile with synced avatar
-      const cachedProfile = await this.getCachedProfile(userId);
-      if (cachedProfile) {
-        const syncedAvatar = await this.getSyncedAvatarURL(userId);
-        if (syncedAvatar && syncedAvatar !== cachedProfile.avatar) {
-          cachedProfile.avatar = syncedAvatar;
-          console.log('📱 Updated cached profile with synced avatar');
-        }
-        return cachedProfile;
-      }
-
-      return null;
     } catch (error) {
       console.error('❌ Error in getProfile:', error);
-      
-      if (error instanceof TypeError && error.message.includes('Network request failed')) {
-        console.log('🌐 Network request failed, using cached profile');
-      }
       
       // Final fallback to cached data
       const cachedProfile = await this.getCachedProfile(userId);
       if (cachedProfile) {
-        const syncedAvatar = await this.getSyncedAvatarURL(userId);
-        if (syncedAvatar && syncedAvatar !== cachedProfile.avatar) {
-          cachedProfile.avatar = syncedAvatar;
-        }
+        console.log('📱 Using cached profile (exception fallback)');
+        return cachedProfile;
       }
-      return cachedProfile;
+      
+      return null;
     }
   }
 
   static async updateProfile(userId: string, updates: Partial<DatabaseUser>): Promise<boolean> {
     try {
       console.log('📝 Updating profile for user:', userId);
-      console.log('📝 Updates:', JSON.stringify(updates, null, 2));
 
-      // Check if this is an avatar update
-      if (updates.avatar !== undefined) {
-        console.log('📸 Avatar update detected:', {
-          hasAvatar: !!updates.avatar,
-          avatarType: typeof updates.avatar,
-          avatarValue: updates.avatar?.substring(0, 50) + '...'
-        });
-
-        // If avatar is a local file URI, upload it first
-        if (updates.avatar && updates.avatar.startsWith('file://')) {
-          console.log('📤 Uploading new avatar image...');
-          const uploadedUrl = await this.uploadAvatar(userId, updates.avatar);
-          
-          if (uploadedUrl) {
-            console.log('✅ Avatar uploaded successfully, new URL:', uploadedUrl);
-            updates.avatar = uploadedUrl;
-          } else {
-            console.log('⚠️ Avatar upload failed, keeping local file URI');
-            // Keep the local URI as fallback
-          }
+      // Handle avatar upload if needed
+      if (updates.avatar && updates.avatar.startsWith('file://')) {
+        console.log('📤 Uploading new avatar image...');
+        const uploadedUrl = await this.uploadAvatar(userId, updates.avatar);
+        if (uploadedUrl) {
+          updates.avatar = uploadedUrl;
         }
       }
 
-      // STEP 1: Always update cache FIRST to guarantee data persistence
+      // Get current profile
       const currentProfile = await this.getCachedProfile(userId);
-      console.log('📱 Current cached profile:', currentProfile ? {
-        name: currentProfile.name,
-        bio: currentProfile.bio, 
-        age: currentProfile.age,
-        avatar: currentProfile.avatar?.substring(0, 50) + '...'
-      } : 'No cached profile');
-
+      
+      // Create updated profile
       let updatedProfile: DatabaseUser;
-
       if (currentProfile) {
-        // Update existing profile
-        updatedProfile = { 
-          ...currentProfile, 
-          ...updates  // This will overwrite with new values
-        };
+        updatedProfile = { ...currentProfile, ...updates };
       } else {
-        // Create new profile
         updatedProfile = {
           id: userId,
           email: `user_${userId.substring(0, 8)}@temp.com`,
@@ -207,22 +119,12 @@ export class ProfileService {
         };
       }
 
-      console.log('📝 Final profile to save:', {
-        name: updatedProfile.name,
-        bio: updatedProfile.bio,
-        age: updatedProfile.age,
-        avatarPreview: updatedProfile.avatar?.substring(0, 50) + '...',
-        avatarExists: !!updatedProfile.avatar
-      });
-
-      // Save to cache (this ALWAYS succeeds)
+      // Always cache first (guaranteed to work)
       await this.cacheProfile(userId, updatedProfile);
-      console.log('✅ Profile saved to cache - data is now persistent');
-
-      // STEP 2: Try to update database (optional)
+      
+      // Try to update database (optional)
       try {
-        console.log('🔄 Attempting database update...');
-        const { data, error: dbError } = await supabase
+        const { error: dbError } = await supabase
           .from('users')
           .update({
             name: updatedProfile.name,
@@ -231,62 +133,21 @@ export class ProfileService {
             avatar: updatedProfile.avatar,
             updated_at: new Date().toISOString()
           })
-          .eq('id', userId)
-          .select();
+          .eq('id', userId);
 
         if (dbError) {
-          console.log('⚠️ Database update failed (but cache succeeded):', {
-            message: dbError.message,
-            code: dbError.code,
-            hint: dbError.hint,
-            details: dbError.details
-          });
-          console.log('💡 Suggestion: Check RLS policies in Supabase dashboard');
+          console.log('⚠️ Database update failed (but cache succeeded):', dbError.message);
         } else {
-          console.log('✅ Profile synced to database successfully:', data);
+          console.log('✅ Profile synced to database');
         }
       } catch (dbError) {
         console.log('⚠️ Database sync exception (but cache succeeded):', dbError);
       }
 
-      // Sync avatar URL if avatar was updated
-      if (updates.avatar !== undefined) {
-        await this.syncAvatarURL(userId, updates.avatar);
-        console.log('✅ Avatar URL synced across devices');
-      }
-
-      return true; // Always return true because cache update succeeded
+      return true;
     } catch (error) {
-      console.error('❌ Critical error in updateProfile:', error);
+      console.error('❌ Error in updateProfile:', error);
       return false;
-    }
-  }
-
-  static async createProfile(profileData: Omit<DatabaseUser, 'id' | 'created_at'>): Promise<string | null> {
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .insert([profileData])
-        .select('id')
-        .single();
-
-      if (error) {
-        console.error('Error creating profile:', error);
-        return null;
-      }
-
-      // Cache the new profile and sync avatar
-      const newProfile = { ...profileData, id: data.id, created_at: new Date().toISOString() } as DatabaseUser;
-      await this.cacheProfile(data.id, newProfile);
-      if (profileData.avatar) {
-        await this.syncAvatarURL(data.id, profileData.avatar);
-        console.log('📱 New profile created and avatar synced');
-      }
-
-      return data.id;
-    } catch (error) {
-      console.error('Error in createProfile:', error);
-      return null;
     }
   }
 
@@ -309,102 +170,15 @@ export class ProfileService {
     }
   }
 
-  // Method to force sync profile from server (useful for cross-device login)
-  static async forceProfileSync(userId: string): Promise<DatabaseUser | null> {
-    try {
-      console.log('🔄 Force syncing profile from server for user:', userId);
-      
-      const cacheKey = `${PROFILE_CACHE_PREFIX}${userId}`;
-      
-      // Get existing cached data first to preserve local updates
-      const cachedProfile = await AsyncStorage.getItem(cacheKey);
-      const existingProfile = cachedProfile ? JSON.parse(cachedProfile) : null;
-      
-      // Get fresh data from server
-      const serverProfile = await this.getProfile(userId);
-      
-      if (serverProfile) {
-        // Merge server data with existing local data, preserving local values where they exist
-        const mergedProfile = {
-          ...serverProfile,
-          // Preserve local data if it exists and server data is empty/null
-          age: existingProfile?.age ?? serverProfile.age,
-          bio: existingProfile?.bio || serverProfile.bio,
-          avatar: existingProfile?.avatar || serverProfile.avatar,
-        };
-        
-        // Save merged profile back to cache
-        await AsyncStorage.setItem(cacheKey, JSON.stringify(mergedProfile));
-        console.log('📱 Profile synced and merged with local data, preserved avatar:', !!mergedProfile.avatar);
-        
-        return mergedProfile;
-      }
-      
-      return serverProfile;
-    } catch (error) {
-      console.error('Error in forceProfileSync:', error);
-      return null;
-    }
-  }
-
-  // Method to get avatar URL for cross-device consistency
-  static async getAvatarURL(userId: string): Promise<string | null> {
-    try {
-      // First check synced avatar URL
-      const syncedUrl = await this.getSyncedAvatarURL(userId);
-      if (syncedUrl) {
-        return syncedUrl;
-      }
-
-      // Fallback to profile data
-      const profile = await this.getProfile(userId);
-      return profile?.avatar || null;
-    } catch (error) {
-      console.error('Error getting avatar URL:', error);
-      return null;
-    }
-  }
-
-  // Clear all profile cache (for logout)
-  static async clearAllProfileCache(): Promise<void> {
-    try {
-      const allKeys = await AsyncStorage.getAllKeys();
-      const profileKeys = allKeys.filter(key => 
-        key.startsWith(PROFILE_CACHE_PREFIX) || 
-        key.startsWith(AVATAR_CACHE_PREFIX)
-      );
-      
-      if (profileKeys.length > 0) {
-        await AsyncStorage.multiRemove(profileKeys);
-        console.log('🗑️  Cleared all profile cache:', profileKeys.length, 'items');
-      }
-    } catch (error) {
-      console.error('Error clearing profile cache:', error);
-    }
-  }
-
-  // Clear specific user profile cache
-  static async clearUserProfileCache(userId: string): Promise<void> {
-    try {
-      const profileKey = `${PROFILE_CACHE_PREFIX}${userId}`;
-      const avatarKey = `${AVATAR_CACHE_PREFIX}${userId}`;
-      
-      await AsyncStorage.multiRemove([profileKey, avatarKey]);
-      console.log('🗑️  Cleared profile cache for user:', userId);
-    } catch (error) {
-      console.error('Error clearing user profile cache:', error);
-    }
-  }
-
-  // Ensure profile exists (required by profile.tsx)
+  // Simple ensure profile exists
   static async ensureProfileExists(userId: string, email?: string, name?: string): Promise<boolean> {
     try {
       console.log('🔍 Ensuring profile exists for user:', userId);
       
-      // Check cache first
-      const cachedProfile = await this.getCachedProfile(userId);
-      if (cachedProfile) {
-        console.log('✅ Profile exists in cache');
+      // Check if profile already exists
+      const existingProfile = await this.getProfile(userId);
+      if (existingProfile) {
+        console.log('✅ Profile already exists');
         return true;
       }
       
@@ -418,7 +192,7 @@ export class ProfileService {
       };
       
       await this.cacheProfile(userId, newProfile);
-      console.log('✅ New profile created in cache');
+      console.log('✅ New profile created');
       
       return true;
     } catch (error) {
@@ -427,50 +201,36 @@ export class ProfileService {
     }
   }
 
-  // Load profile with persistence (required by profile.tsx)
+  // Simple load with persistence - just use getProfile
   static async loadProfileWithPersistence(userId: string): Promise<DatabaseUser | null> {
+    console.log('🔄 Loading profile with persistence for user:', userId);
+    return await this.getProfile(userId);
+  }
+
+  // Clear all profile cache
+  static async clearAllProfileCache(): Promise<void> {
     try {
-      console.log('🔄 Loading profile with persistence for user:', userId);
+      const allKeys = await AsyncStorage.getAllKeys();
+      const profileKeys = allKeys.filter(key => key.startsWith(PROFILE_CACHE_PREFIX));
       
-      // Try cache first for persistence
-      const cachedProfile = await this.getCachedProfile(userId);
-      if (cachedProfile) {
-        console.log('📱 Found persistent profile data:', {
-          name: cachedProfile.name,
-          bio: cachedProfile.bio || 'No bio',
-          age: cachedProfile.age || 'No age',
-          avatarExists: !!cachedProfile.avatar,
-          avatarPreview: cachedProfile.avatar?.substring(0, 50) + '...',
-          avatarType: typeof cachedProfile.avatar
-        });
-        
-        // Check for synced avatar URL
-        const syncedAvatar = await this.getSyncedAvatarURL(userId);
-        if (syncedAvatar && syncedAvatar !== cachedProfile.avatar) {
-          console.log('📱 Found newer synced avatar, updating:', syncedAvatar.substring(0, 50) + '...');
-          cachedProfile.avatar = syncedAvatar;
-        }
-        
-        return cachedProfile;
+      if (profileKeys.length > 0) {
+        await AsyncStorage.multiRemove(profileKeys);
+        console.log('🗑️ Cleared all profile cache:', profileKeys.length, 'items');
       }
-      
-      console.log('❌ No cached profile found, trying database...');
-      // Fallback to regular getProfile
-      return await this.getProfile(userId);
     } catch (error) {
-      console.error('Error loading profile with persistence:', error);
-      return null;
+      console.error('Error clearing profile cache:', error);
     }
   }
 
-  // Enhanced clear cache (required by profile.tsx)
+  // Force sync profile from server (used by useAuth)
+  static async forceProfileSync(userId: string): Promise<DatabaseUser | null> {
+    console.log('🔄 Force syncing profile from server for user:', userId);
+    // Just use regular getProfile which already handles cache and database
+    return await this.getProfile(userId);
+  }
+
+  // Enhanced clear cache alias
   static async clearAllProfileCacheEnhanced(): Promise<void> {
-    try {
-      console.log('🗑️ Clearing enhanced profile cache...');
-      await this.clearAllProfileCache();
-      console.log('✅ Enhanced profile cache cleared');
-    } catch (error) {
-      console.error('Error clearing enhanced profile cache:', error);
-    }
+    await this.clearAllProfileCache();
   }
 }

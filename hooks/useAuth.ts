@@ -3,6 +3,7 @@ import { clearAuthChangeCallback, setAuthChangeCallback } from '@/lib/authServic
 import { ProfileService } from '@/lib/profileService';
 import { sessionStorage } from '@/lib/sessionStorage';
 import { supabase } from '@/lib/supabase';
+import { authStateManager } from '@/lib/authStateManager';
 import { User } from '@supabase/supabase-js';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -11,13 +12,28 @@ export function useAuth() {
   const [loading, setLoading] = useState(true);
   const [initialized, setInitialized] = useState(false);
 
-  console.log('🔧 useAuth hook render - Current state:', {
+  const currentState = {
     hasUser: !!user,
     userEmail: user?.email || 'none',
     loading,
     initialized,
     isAuthenticated: !!user
-  });
+  };
+  
+  console.log('🔧 useAuth hook render - Current state:', currentState);
+
+  // Also log when state actually changes
+  useEffect(() => {
+    console.log('🔄 useAuth state changed:', {
+      userEmail: user?.email || 'none',
+      isAuthenticated: !!user,
+      initialized,
+      loading
+    });
+    
+    // Update global state manager
+    authStateManager.setAuthState(user, !!user, initialized, loading);
+  }, [user?.email, user?.id, initialized, loading]);
 
   // Force refresh authentication state
   const refreshAuth = useCallback(async () => {

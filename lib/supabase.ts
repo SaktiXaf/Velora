@@ -1,6 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Supabase config with your project details
 const supabaseUrl = 'https://ceakczkuflaawjpgyjst.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNlYWtjemt1ZmxhYXdqcGd5anN0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM2NDYzNjcsImV4cCI6MjA2OTIyMjM2N30.01495ERM9vPJ4DODziTs6XUo5QfWhj0NUNHUFerBYGI';
 

@@ -1,10 +1,21 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import React from 'react';
+import { useGlobalAuth } from '@/hooks/useGlobalAuth';
 
 export default function TabLayout() {
+  // Force tab layout to re-render when auth state changes
+  const { user, isAuthenticated } = useGlobalAuth();
+  
+  console.log('🔧 TabLayout render - Auth state:', {
+    isAuthenticated,
+    userEmail: user?.email || 'none',
+    timestamp: new Date().toISOString().split('T')[1].substring(0, 8)
+  });
+  
   return (
     <Tabs
+      key={`tabs-${user?.id || 'anonymous'}`} // Force re-mount when user changes
       initialRouteName="index"
       screenOptions={{
         tabBarActiveTintColor: '#007AFF',

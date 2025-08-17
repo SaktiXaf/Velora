@@ -1,7 +1,8 @@
 import { Theme } from '@/constants/Theme';
 import { useTheme } from '@/contexts/ThemeContext';
-import { useAuth } from '@/hooks/useAuth';
-import React from 'react';
+import { useGlobalAuth } from '@/hooks/useGlobalAuth';
+import { useRouter } from 'expo-router';
+import React, { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -10,8 +11,17 @@ interface AuthLoadingScreenProps {
 }
 
 export default function AuthLoadingScreen({ children }: AuthLoadingScreenProps) {
-  const { loading } = useAuth();
+  const { loading, isAuthenticated } = useGlobalAuth();
   const { colors } = useTheme();
+  const router = useRouter();
+
+  // Auto-navigate to home when user is authenticated
+  useEffect(() => {
+    if (!loading && isAuthenticated) {
+      console.log('🚀 AuthLoadingScreen: User authenticated, navigating to home');
+      router.replace('/(tabs)');
+    }
+  }, [loading, isAuthenticated, router]);
 
   if (loading) {
     return (

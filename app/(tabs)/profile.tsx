@@ -71,15 +71,6 @@ export default function ProfileScreen() {
     useCallback(() => {
       console.log('Profile tab focused, authenticated:', isAuthenticated);
       if (isAuthenticated && user) {
-        loadUserProfile(user.id);
-      }
-    }, [isAuthenticated, user])
-  );
-
-  // Reload profile data when the component gains focus (to update followers/following)
-  useFocusEffect(
-    useCallback(() => {
-      if (isAuthenticated && user) {
         console.log('📊 Profile focused, reloading user data for:', user.id);
         loadUserProfile(user.id);
         // Also refresh follow stats

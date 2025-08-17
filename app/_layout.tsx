@@ -5,9 +5,10 @@ import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import AuthLoadingScreen from '@/components/AuthLoadingScreen';
 import { ThemeProvider } from '@/contexts/ThemeContext';
+import { AuthProvider } from '@/contexts/AuthContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import AuthNavigator from '../components/AuthNavigator';
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -21,12 +22,31 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <ThemeProvider>
-        <AuthLoadingScreen>
-          <NavigationThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+      <AuthProvider>
+        <ThemeProvider>
+          <AuthNavigator>
+            <NavigationThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
             <Stack>
               <Stack.Screen 
                 name="(tabs)" 
+                options={{ 
+                  headerShown: false 
+                }} 
+              />
+              <Stack.Screen 
+                name="auth" 
+                options={{ 
+                  headerShown: false 
+                }} 
+              />
+              <Stack.Screen 
+                name="login" 
+                options={{ 
+                  headerShown: false 
+                }} 
+              />
+              <Stack.Screen 
+                name="register" 
                 options={{ 
                   headerShown: false 
                 }} 
@@ -35,8 +55,9 @@ export default function RootLayout() {
             </Stack>
             <StatusBar style="auto" />
           </NavigationThemeProvider>
-        </AuthLoadingScreen>
+        </AuthNavigator>
       </ThemeProvider>
+      </AuthProvider>
     </SafeAreaProvider>
   );
 }

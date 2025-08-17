@@ -1,7 +1,8 @@
 import { useTheme } from '@/contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
-import React from 'react';
+import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import AuthModal from './AuthModal';
 
 interface WelcomeScreenProps {
   onSignIn: () => void;
@@ -10,35 +11,45 @@ interface WelcomeScreenProps {
 
 export default function WelcomeScreen({ onSignIn, onSignUp }: WelcomeScreenProps) {
   const { colors } = useTheme();
+  const [showAuthModal, setShowAuthModal] = useState(false);
+
+  const handleGetStarted = () => {
+    setShowAuthModal(true);
+  };
+
+  const handleCloseModal = () => {
+    setShowAuthModal(false);
+  };
 
   return (
-    <ScrollView 
-      style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={styles.contentContainer}
-      showsVerticalScrollIndicator={false}
-      bounces={true}
-      alwaysBounceVertical={true}
-    >
-      {/* Hero Section */}
-      <View style={styles.heroSection}>
-        <View style={[styles.logoContainer, { backgroundColor: colors.primary }]}>
-          <Ionicons name="fitness" size={48} color={colors.white} />
+    <>
+      <ScrollView 
+        style={[styles.container, { backgroundColor: colors.background }]}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+        bounces={true}
+        alwaysBounceVertical={true}
+      >
+        {/* Hero Section */}
+        <View style={styles.heroSection}>
+          <View style={[styles.logoContainer, { backgroundColor: colors.primary }]}>
+            <Ionicons name="fitness" size={48} color={colors.white} />
+          </View>
+          
+          <Text style={[styles.welcomeTitle, { color: colors.text }]}>
+            Welcome to Velora
+          </Text>
+          
+          <Text style={[styles.welcomeSubtitle, { color: colors.textSecondary }]}>
+            Your personal fitness companion for tracking runs, rides, and achieving your goals
+          </Text>
         </View>
-        
-        <Text style={[styles.welcomeTitle, { color: colors.text }]}>
-          Welcome to Velora
-        </Text>
-        
-        <Text style={[styles.welcomeSubtitle, { color: colors.textSecondary }]}>
-          Your personal fitness companion for tracking runs, rides, and achieving your goals
-        </Text>
-      </View>
 
-      {/* Features Grid */}
-      <View style={styles.featuresSection}>
-        <Text style={[styles.featuresTitle, { color: colors.text }]}>
-          Why Choose Velora?
-        </Text>
+        {/* Features Grid */}
+        <View style={styles.featuresSection}>
+          <Text style={[styles.featuresTitle, { color: colors.text }]}>
+            Why Choose Velora?
+          </Text>
         
         <View style={styles.featuresGrid}>
           {/* Row 1 */}
@@ -98,50 +109,59 @@ export default function WelcomeScreen({ onSignIn, onSignUp }: WelcomeScreenProps
       </View>
 
       {/* Action Buttons */}
-      <View style={styles.actionsSection}>
-        <TouchableOpacity 
-          style={[styles.primaryButton, { backgroundColor: colors.primary }]}
-          onPress={onSignUp}
-        >
-          <Text style={[styles.primaryButtonText, { color: colors.white }]}>
-            Get Started
-          </Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={[styles.secondaryButton, { borderColor: colors.border }]}
-          onPress={onSignIn}
-        >
-          <Text style={[styles.secondaryButtonText, { color: colors.text }]}>
-            Already have an account? Sign In
-          </Text>
-        </TouchableOpacity>
-      </View>
+        <View style={styles.actionsSection}>
+          <TouchableOpacity 
+            style={[styles.primaryButton, { backgroundColor: colors.primary }]}
+            onPress={handleGetStarted}
+          >
+            <Text style={[styles.primaryButtonText, { color: colors.white }]}>
+              Get Started
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.secondaryButton, { borderColor: colors.border }]}
+            onPress={onSignIn}
+          >
+            <Text style={[styles.secondaryButtonText, { color: colors.text }]}>
+              Already have an account? Sign In
+            </Text>
+          </TouchableOpacity>
+        </View>
 
-      {/* Stats Preview */}
-      <View style={[styles.statsPreview, { backgroundColor: colors.surface }]}>
-        <Text style={[styles.statsTitle, { color: colors.text }]}>
-          Join thousands of active users
-        </Text>
-        
-        <View style={styles.statsRow}>
-          <View style={styles.statItem}>
-            <Text style={[styles.statNumber, { color: colors.primary }]}>10K+</Text>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Active Users</Text>
-          </View>
+        {/* Stats Preview */}
+        <View style={[styles.statsPreview, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.statsTitle, { color: colors.text }]}>
+            Join thousands of active users
+          </Text>
           
-          <View style={styles.statItem}>
-            <Text style={[styles.statNumber, { color: colors.primary }]}>50K+</Text>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Workouts Tracked</Text>
-          </View>
-          
-          <View style={styles.statItem}>
-            <Text style={[styles.statNumber, { color: colors.primary }]}>1M+</Text>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>KM Covered</Text>
+          <View style={styles.statsRow}>
+            <View style={styles.statItem}>
+              <Text style={[styles.statNumber, { color: colors.primary }]}>10K+</Text>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Active Users</Text>
+            </View>
+            
+            <View style={styles.statItem}>
+              <Text style={[styles.statNumber, { color: colors.primary }]}>50K+</Text>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Workouts Tracked</Text>
+            </View>
+            
+            <View style={styles.statItem}>
+              <Text style={[styles.statNumber, { color: colors.primary }]}>1M+</Text>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>KM Covered</Text>
+            </View>
           </View>
         </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
+
+      {/* Auth Modal - Outside ScrollView */}
+      <AuthModal
+        visible={showAuthModal}
+        onClose={handleCloseModal}
+        onSignUp={onSignUp}
+        onSignIn={onSignIn}
+      />
+    </>
   );
 }
 

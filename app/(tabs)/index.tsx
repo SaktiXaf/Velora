@@ -2,10 +2,9 @@ import ActivitySummary from '@/components/ActivitySummary';
 import { FloatingActionButton } from '@/components/FloatingActionButton';
 import NotificationModal from '@/components/NotificationModal';
 import SearchScreen from '@/components/SearchScreen';
-import WelcomeScreen from '@/components/WelcomeScreen';
 import { Theme } from '@/constants/Theme';
 import { useTheme } from '@/contexts/ThemeContext';
-import { useAuth } from '@/hooks/useAuth';
+import { useGlobalAuth } from '@/hooks/useGlobalAuth';
 import { useNotifications } from '@/hooks/useNotifications';
 import { Activity, activityService } from '@/lib/activityService';
 import { authEventEmitter } from '@/lib/authEvents';
@@ -18,7 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function HomeScreen() {
   const { colors } = useTheme();
-  const { isAuthenticated, user, loading, initialized } = useAuth();
+  const { isAuthenticated, user, loading, initialized } = useGlobalAuth();
   const router = useRouter();
   
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -162,19 +161,19 @@ export default function HomeScreen() {
     );
   }
 
+  // If not authenticated, AuthNavigator should handle the redirect
+  // This should not happen in normal flow, but just in case:
   if (!isAuthenticated) {
-    console.log('❌ Showing welcome screen - Auth status:', { 
-      isAuthenticated, 
-      initialized, 
-      user: user?.email || 'no user',
-      userId: user?.id || 'no id'
-    });
+    console.log('❌ HomeScreen: User not authenticated - this should be handled by AuthNavigator');
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        <WelcomeScreen 
-          onSignIn={() => router.push('/profile')} // Navigate to profile tab where login is handled
-          onSignUp={() => router.push('/profile')} // Navigate to profile tab where register is handled
-        />
+        <View style={styles.emptyState}>
+          <Ionicons name="person-outline" size={48} color={colors.primary} />
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>Not Authenticated</Text>
+          <Text style={[styles.emptyDescription, { color: colors.textSecondary }]}>
+            Redirecting to login...
+          </Text>
+        </View>
       </SafeAreaView>
     );
   }
