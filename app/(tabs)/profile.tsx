@@ -66,33 +66,21 @@ export default function ProfileScreen() {
   const [followModalType, setFollowModalType] = useState<'followers' | 'following'>('followers');
   const [followModalTitle, setFollowModalTitle] = useState('');
 
-  // Check authentication status when this tab is focused and reload data
+  // Single focus effect to handle all loading
   useFocusEffect(
     useCallback(() => {
       console.log('Profile tab focused, authenticated:', isAuthenticated);
       if (isAuthenticated && user) {
-        console.log('📊 Profile focused, reloading user data for:', user.id);
+        console.log('📊 Profile focused, loading data for:', user.id);
         loadUserProfile(user.id);
-        // Also refresh follow stats
-        if (refreshStats) {
-          console.log('🔄 Refreshing follow stats...');
-          refreshStats();
-        }
       }
-    }, [isAuthenticated, user, refreshStats])
+    }, [isAuthenticated, user?.id])
   );
 
   // Update userData when followStats change (real-time updates)
   useEffect(() => {
-    console.log('🔍 useEffect followStats check:', { 
-      followStats, 
-      currentFollowers: userData.stats.followers,
-      currentFollowing: userData.stats.following,
-      followStatsLoading
-    });
-    
-    if (followStats) {
-      console.log('🔔 Setting follow stats from hook:', followStats);
+    if (followStats && !followStatsLoading) {
+      console.log('🔔 Updating follow stats:', followStats);
       setUserData(prev => ({
         ...prev,
         stats: {
@@ -104,45 +92,55 @@ export default function ProfileScreen() {
     }
   }, [followStats, followStatsLoading]);
 
-  useEffect(() => {
-    if (isAuthenticated && user) {
-      loadUserProfile(user.id);
-    }
-  }, [isAuthenticated, user]);
-
   const loadUserProfile = async (userId: string) => {
+    if (loading) {
+      console.log('⚠️ Already loading, skipping...');
+      return;
+    }
+    
     setLoading(true);
+    
+    // Set a timeout to prevent infinite loading
+    const loadingTimeout = setTimeout(() => {
+      console.log('⏰ Loading timeout reached, setting default profile');
+      setUserData(prev => ({
+        name: user?.email?.split('@')[0] || 'User',
+        bio: '',
+        avatar: null,
+        age: null,
+        stats: {
+          totalDistance: 0,
+          totalTime: 0,
+          totalActivities: 0,
+          followers: prev.stats.followers,
+          following: prev.stats.following,
+        },
+      }));
+      setLoading(false);
+    }, 10000); // 10 second timeout
+    
     try {
       console.log('🔄 Loading user profile for userId:', userId);
-      console.log('👤 Current user object:', { id: user?.id, email: user?.email });
       
-      // First ensure profile exists in database
-      if (user?.email) {
-        console.log('🔍 Ensuring profile exists...');
-        const profileCreated = await ProfileService.ensureProfileExists(userId, user.email, undefined);
-        console.log('✅ Profile ensure result:', profileCreated);
-      } else {
-        console.warn('⚠️ No user email available for profile creation');
+      // Simple profile load - avoid complex parallel calls
+      let profile = await ProfileService.getProfile(userId);
+      
+      if (!profile && user?.email) {
+        console.log('🔍 No profile found, creating basic profile...');
+        await ProfileService.ensureProfileExists(userId, user.email, undefined);
+        profile = await ProfileService.getProfile(userId);
       }
       
-      // Use the new persistence-priority loading method
-      const [profile, activityStats] = await Promise.all([
-        ProfileService.loadProfileWithPersistence(userId),
-        activityService.getTotalStats(userId)
-      ]);
+      // Load activity stats separately and simply
+      let activityStats = { totalDistance: 0, totalDuration: 0, totalActivities: 0 };
+      try {
+        activityStats = await activityService.getTotalStats(userId);
+      } catch (statsError) {
+        console.log('⚠️ Could not load activity stats:', statsError);
+      }
       
       if (profile) {
-        console.log('👤 Profile loaded successfully:', {
-          name: profile.name,
-          bio: profile.bio || 'No bio',
-          age: profile.age || 'No age',
-          hasAvatar: !!profile.avatar,
-          avatarUrl: profile.avatar,
-          avatarType: typeof profile.avatar,
-          currentFollowers: userData.stats.followers,
-          currentFollowing: userData.stats.following,
-        });
-        
+        console.log('✅ Profile loaded:', profile.name);
         setUserData(prev => ({
           name: profile.name,
           bio: profile.bio || '',
@@ -152,14 +150,13 @@ export default function ProfileScreen() {
             totalDistance: activityStats.totalDistance,
             totalTime: activityStats.totalDuration,
             totalActivities: activityStats.totalActivities,
-            // Keep current follow stats from useFollowStats hook
+            // Keep existing follow stats
             followers: prev.stats.followers,
             following: prev.stats.following,
           },
         }));
       } else {
-        console.log('⚠️ No profile found, using defaults');
-        // Set default values if no profile found
+        console.log('⚠️ Using default profile data');
         setUserData(prev => ({
           name: user?.email?.split('@')[0] || 'User',
           bio: '',
@@ -169,15 +166,14 @@ export default function ProfileScreen() {
             totalDistance: activityStats.totalDistance,
             totalTime: activityStats.totalDuration,
             totalActivities: activityStats.totalActivities,
-            // Keep current follow stats from useFollowStats hook
             followers: prev.stats.followers,
             following: prev.stats.following,
           },
         }));
       }
     } catch (error) {
-      console.error('Error loading profile:', error);
-      // Set default values but keep follow stats
+      console.error('❌ Error loading profile:', error);
+      // Set safe defaults
       setUserData(prev => ({
         name: 'User',
         bio: '',
@@ -187,12 +183,12 @@ export default function ProfileScreen() {
           totalDistance: 0,
           totalTime: 0,
           totalActivities: 0,
-          // Keep current follow stats from useFollowStats hook
           followers: prev.stats.followers,
           following: prev.stats.following,
         },
       }));
     } finally {
+      clearTimeout(loadingTimeout);
       setLoading(false);
     }
   };
@@ -375,7 +371,8 @@ export default function ProfileScreen() {
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
         <View style={styles.loginContainer}>
           <Ionicons name="refresh-outline" size={60} color={colors.primary} />
-          <Text style={[styles.loginSubtitle, { color: colors.textSecondary }]}>Loading...</Text>
+          <Text style={[styles.loginSubtitle, { color: colors.textSecondary }]}>Loading Profile...</Text>
+          <Text style={[styles.loginSubtitle, { color: colors.textSecondary }]}>This should only take a moment</Text>
         </View>
       </SafeAreaView>
     );

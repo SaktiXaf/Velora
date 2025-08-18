@@ -9,6 +9,7 @@ import { useNotifications } from '@/hooks/useNotifications';
 import { Activity, activityService } from '@/lib/activityService';
 import { authEventEmitter } from '@/lib/authEvents';
 import { ProfileService } from '@/lib/profileService';
+import { sessionStorage } from '@/lib/sessionStorage';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -62,6 +63,23 @@ export default function HomeScreen() {
         activityService.getTotalStats(user.id),
         ProfileService.getProfile(user.id)
       ]);
+      
+      if (!profile) {
+        // Paksa logout jika profile tidak ada
+        console.log('❌ No profile found for user, forcing logout...');
+        await sessionStorage.clearSession();
+        setActivities([]);
+        setUserName('');
+        setUserAvatar(null);
+        setTotalStats({
+          totalDistance: 0,
+          totalDuration: 0,
+          totalCalories: 0,
+          totalActivities: 0,
+        });
+        router.replace('/login');
+        return;
+      }
       
       console.log(`📊 Loaded ${recentActivities.length} activities, stats:`, stats);
       console.log(`👤 Profile loaded:`, profile);

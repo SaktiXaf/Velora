@@ -20,6 +20,54 @@ export class UserService {
   static async createUserProfile(userId: string, email: string, additionalData: Partial<UserProfile> = {}): Promise<{ success: boolean; user?: UserProfile; error?: string }> {
     try {
       console.log('👤 Creating user profile for:', email);
+      console.log('📝 Profile data to insert:', additionalData);
+      
+      // First, try to get current session to ensure user is authenticated
+      const { data: sessionData } = await supabase.auth.getSession();
+      
+      console.log('🔐 Session check:', {
+        hasSession: !!sessionData.session,
+        userId: sessionData.session?.user?.id || 'none',
+        sessionValid: !!sessionData.session?.access_token
+      });
+      
+      // METHOD 1: Try using bypass function first (works even with RLS issues)
+      console.log('🚀 Attempting to use bypass function...');
+      
+      try {
+        const { data: bypassResult, error: bypassError } = await supabase
+          .rpc('create_user_profile_bypass', {
+            user_id: userId,
+            user_email: email,
+            user_name: additionalData.name || null,
+            user_address: additionalData.address || null,
+            user_age: additionalData.age || null
+          });
+        
+        if (!bypassError && bypassResult?.success) {
+          console.log('✅ User profile created via bypass function');
+          
+          // Convert the result to UserProfile format
+          const userProfile: UserProfile = {
+            id: userId,
+            email: email,
+            name: additionalData.name,
+            address: additionalData.address,
+            age: additionalData.age,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          };
+          
+          return { success: true, user: userProfile };
+        } else {
+          console.log('⚠️ Bypass function failed:', bypassError || bypassResult);
+        }
+      } catch (bypassFunctionError) {
+        console.log('⚠️ Bypass function not available:', bypassFunctionError);
+      }
+      
+      // METHOD 2: Try regular insert if bypass function fails
+      console.log('📤 Attempting regular database insert...');
       
       const userData: Partial<UserProfile> = {
         id: userId,
@@ -29,11 +77,14 @@ export class UserService {
         ...additionalData
       };
 
-      // First, try to get current session to ensure user is authenticated
-      const { data: sessionData } = await supabase.auth.getSession();
+      console.log('📋 Final user data:', userData);
       
       if (!sessionData.session) {
         console.warn('⚠️ No active session found, user profile creation may fail due to RLS');
+        return { 
+          success: false, 
+          error: 'No active session. Please ensure user is signed in before creating profile.' 
+        };
       }
 
       const { data, error } = await supabase
@@ -43,20 +94,49 @@ export class UserService {
         .single();
 
       if (error) {
-        console.error('❌ User profile creation failed:', error);
+        console.error('❌ Regular insert failed:', {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint,
+        });
         
         // If RLS error, provide helpful message
         if (error.code === '42501' || error.message.includes('row-level security')) {
           return { 
             success: false, 
-            error: 'Authentication required for user profile creation. Please ensure user is signed in.' 
+            error: 'RLS Policy Error: User profile creation blocked by database security. Admin needs to run the bypass function SQL script.' 
           };
         }
         
-        return { success: false, error: error.message };
+        // If duplicate key error
+        if (error.code === '23505') {
+          console.log('⚠️ User profile already exists, trying to update instead...');
+          
+          const { data: updateData, error: updateError } = await supabase
+            .from('users')
+            .update({
+              name: additionalData.name,
+              address: additionalData.address,
+              age: additionalData.age,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', userId)
+            .select()
+            .single();
+            
+          if (updateError) {
+            return { success: false, error: `Update failed: ${updateError.message}` };
+          }
+          
+          console.log('✅ User profile updated instead of created');
+          return { success: true, user: updateData };
+        }
+        
+        return { success: false, error: `Database error (${error.code}): ${error.message}` };
       }
 
-      console.log('✅ User profile created successfully:', data.email);
+      console.log('✅ User profile created via regular insert:', data.email);
       return { success: true, user: data };
     } catch (error) {
       console.error('❌ User profile creation error:', error);

@@ -35,8 +35,30 @@ export default function RegisterScreen() {
   const createUserProfileAndRedirect = async (user: any, session: any) => {
     try {
       console.log('👤 Creating user profile for:', user.email);
+      console.log('🔐 Session exists:', !!session);
+      console.log('🔐 Session details:', {
+        access_token: session?.access_token ? 'present' : 'missing',
+        user_id: session?.user?.id || 'missing'
+      });
       
-      // Create user profile in database
+      // Ensure session is set in Supabase client
+      if (session) {
+        await supabase.auth.setSession({
+          access_token: session.access_token,
+          refresh_token: session.refresh_token,
+        });
+        console.log('✅ Session set in Supabase client');
+      }
+      
+      // Create user profile in database with debug info
+      console.log('📝 Attempting to create profile with data:', {
+        id: user.id,
+        email: user.email,
+        name: fullName.trim(),
+        address: address.trim(),
+        age: parseInt(age),
+      });
+      
       const createResult = await UserService.createUserProfile(
         user.id,
         user.email || '',
@@ -49,9 +71,30 @@ export default function RegisterScreen() {
       );
       
       if (createResult.success) {
-        console.log('✅ User profile created in database');
+        console.log('✅ User profile created in database successfully');
+        
+        // Verify the profile was actually created by trying to fetch it
+        const verifyResult = await UserService.getUserProfile(user.id);
+        if (verifyResult.success) {
+          console.log('✅ Profile verification successful:', verifyResult.user?.email);
+        } else {
+          console.warn('⚠️ Profile verification failed:', verifyResult.error);
+        }
       } else {
-        console.warn('⚠️ Failed to create user profile:', createResult.error);
+        console.error('❌ Failed to create user profile:', createResult.error);
+        
+        // Show detailed error to help debug
+        Alert.alert(
+          'Profile Creation Failed', 
+          `Could not create user profile in database.\n\nError: ${createResult.error}\n\nYour account was created but profile data was not saved. Please try logging in and completing your profile manually.`,
+          [
+            {
+              text: 'Go to Login',
+              onPress: () => router.replace('/login'),
+            },
+          ]
+        );
+        return;
       }
       
       // Store session locally
@@ -62,7 +105,7 @@ export default function RegisterScreen() {
 
       Alert.alert(
         'Welcome to Velora!',
-        `Registration successful!\n\nName: ${fullName}\nEmail: ${user.email}`,
+        `Registration successful!\n\nName: ${fullName}\nEmail: ${user.email}\n\nProfile has been saved to database.`,
         [
           {
             text: 'Start Using App',
@@ -74,7 +117,7 @@ export default function RegisterScreen() {
       console.error('❌ Profile creation error:', error);
       Alert.alert(
         'Registration Partially Complete',
-        'Your account was created but there was an issue setting up your profile. You can access the app and complete it later.',
+        `Your account was created but there was an issue setting up your profile.\n\nError: ${error}\n\nYou can access the app and complete it later.`,
         [
           {
             text: 'OK',

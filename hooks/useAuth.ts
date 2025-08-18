@@ -103,8 +103,27 @@ export function useAuth() {
           userId: localSession?.userId || 'none',
           lastLogin: localSession?.lastLogin || 'none'
         });
-        
+
         if (localSession && mounted) {
+          // Check if user exists in Supabase Auth
+          const { data: { user: supaUser }, error } = await supabase.auth.getUser();
+          if (error || !supaUser) {
+            console.log('❌ No valid Supabase user for session, clearing session...');
+            await sessionStorage.clearSession();
+            setUser(null);
+            return;
+          }
+
+          // Optionally, check if user profile exists in DB
+          const profile = await ProfileService.getProfile(localSession.userId);
+          if (!profile) {
+            console.log('❌ No profile found for user, clearing session...');
+            await sessionStorage.clearSession();
+            setUser(null);
+            return;
+          }
+
+          // If both checks pass, set user
           const mockUser = {
             id: localSession.userId,
             email: localSession.email,
@@ -117,7 +136,7 @@ export function useAuth() {
           } as User;
           console.log('✅ Setting user from local session:', mockUser.email);
           setUser(mockUser);
-          
+
           // Force sync profile and avatar for cross-device consistency
           console.log('📱 Syncing profile on auth initialization...');
           await ProfileService.forceProfileSync(mockUser.id);
